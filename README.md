@@ -14,7 +14,7 @@ Kai-Sign consolidates verified metadata from multiple trusted sources to enhance
 The main contract that aggregates and manages trusted transaction metadata from multiple verified sources, enabling clear signing on hardware wallets.
 
 #### MetadataRegistry.sol
-A flexible attestation system that allows any user (not limited to KaiSign) to configure their own attesters and run validation checks when signing transactions with metadata. This contract will be deployed across multiple chains to ensure widespread accessibility.
+A flexible attestation system (not limited to KaiSign) that allows any user to configure their own attesters and run validation checks when signing transactions with metadata. This contract will be deployed across multiple chains to ensure widespread accessibility.
 
 ### What to Expect from the Contract
 
