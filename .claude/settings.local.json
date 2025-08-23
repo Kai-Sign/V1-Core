@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init:*)",
+      "Bash(forge install:*)",
+      "Bash(forge test:*)",
+      "Bash(rm:*)",
+      "Bash(forge build:*)",
+      "WebFetch(domain:mermaid.js.org)",
+      "Bash(source:*)",
+      "Bash(cast call:*)",
+      "Bash(forge script:*)",
+      "Bash(npm install:*)",
+      "Bash(curl:*)",
+      "Bash(node:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

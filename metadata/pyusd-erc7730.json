@@ -1,0 +1,60 @@
+{
+  "context": {
+    "contract": {
+      "abi": [
+        {
+          "name": "transfer",
+          "type": "function",
+          "inputs": [
+            {
+              "name": "to",
+              "type": "address"
+            },
+            {
+              "name": "value",
+              "type": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bool"
+            }
+          ]
+        }
+      ],
+      "deployments": [
+        {
+          "chainId": 1,
+          "address": "0x6c3ea9036406852006290770BEdFcAbA0e23A0e8"
+        },
+        {
+          "chainId": 11155111,
+          "address": "0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9"
+        }
+      ]
+    }
+  },
+  "metadata": {
+    "owner": "Paxos Trust Company, LLC",
+    "info": {
+      "legalName": "Paxos Trust Company, LLC",
+      "lastUpdate": "2025-01-21T00:00:00Z"
+    }
+  },
+  "display": [
+    {
+      "path": "to",
+      "label": "Recipient",
+      "format": "addressName"
+    },
+    {
+      "path": "value",
+      "label": "Amount",
+      "format": "tokenAmount",
+      "params": {
+        "tokenPath": "$.context.contract.deployments[0].address"
+      }
+    }
+  ]
+}
