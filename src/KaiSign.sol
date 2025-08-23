@@ -17,7 +17,6 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
     error InsufficientIncentive();
     error InvalidContract();
     error ContractNotFound();
-    error InvalidERC7730Json();
     error CommitmentNotFound();
     error CommitmentExpired();
     error CommitmentAlreadyRevealed();
@@ -161,8 +160,8 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
     event LogRevealSpec(
         address indexed creator,
         bytes32 indexed specID,
-        bytes32 indexed commitmentId,
-        bytes32 blobHash,
+        bytes32 indexed blobHash,
+        bytes32 commitmentId,
         address targetContract,
         uint256 chainId
     );
@@ -170,8 +169,8 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
     event LogCreateSpec(
         address indexed creator,
         bytes32 indexed specID,
-        bytes32 blobHash,
-        address indexed targetContract,
+        bytes32 indexed blobHash,
+        address targetContract,
         uint256 chainId,
         uint256 timestamp,
         bytes32 incentiveId
@@ -223,7 +222,8 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         address indexed targetContract,
         bytes32 indexed specID,
         address indexed creator,
-        uint256 chainId
+        uint256 chainId,
+        bytes32 blobHash
     );
 
     event LogEmergencyPause(address indexed admin);
@@ -491,8 +491,8 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         emit LogRevealSpec(
             msg.sender,
             specID,
-            commitmentId,
             blobHash,
+            commitmentId,
             commitment.targetContract,
             commitment.chainId
         );
@@ -511,7 +511,8 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
             commitment.targetContract,
             specID,
             msg.sender,
-            commitment.chainId
+            commitment.chainId,
+            blobHash
         );
 
         // Auto-propose if enough bond was provided
