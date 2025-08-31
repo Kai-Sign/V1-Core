@@ -234,7 +234,7 @@ contract AuditTests is Test {
         vm.stopPrank();
         
         // Get the question ID and mock result
-        (,,,,,,,bytes32 questionId,,,) = kaisign.specs(specId);
+        (,,,,,,,,bytes32 questionId,,) = kaisign.specs(specId);
         // Mock Reality.eth finalization and acceptance
         vm.mockCall(
             address(realityETH),
