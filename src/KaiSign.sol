@@ -2,10 +2,9 @@
 pragma solidity ^0.8.20;
 
 import {RealityETH_v3_0} from "../staticlib/RealityETH-3.0.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/utils/Pausable.sol";
-import "./MetadataRegistry.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
 
 contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
 
@@ -18,7 +17,6 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
     error InsufficientIncentive();
     error InvalidContract();
     error ContractNotFound();
-    error InvalidIPFS();
     error CommitmentNotFound();
     error CommitmentExpired();
     error CommitmentAlreadyRevealed();
@@ -54,8 +52,8 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
     uint256 public minBond;
     uint256 public templateId;
     
-    // Metadata Registry for attestation
-    MetadataRegistry public metadataRegistry;
+    // Blob hash storage only
+    mapping(bytes32 => bytes32) public specBlobHash;
     
     // Commit-reveal mechanism
     mapping(bytes32 => CommitData) public commitments;
@@ -102,12 +100,11 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         address targetContract;     // 20 bytes - contract this spec validates
         // SLOT 2: 40 bytes - needs 2 slots but efficiently packed
         
-        string ipfs;               // Dynamic - separate slots when needed
+        bytes32 blobHash;          // 32 bytes - EIP-4844 blob hash for ERC7730 JSON
         bytes32 questionId;        // 32 bytes - full slot
         bytes32 incentiveId;       // 32 bytes - linked incentive if any
         uint256 chainId;           // 32 bytes - target chain ID
-        bytes32 metadataContentHash; // 32 bytes - hash of actual metadata content
-        // SLOTS 3+: Only when spec has IPFS/questionId/incentiveId/chainId/metadataContentHash
+        // SLOTS 3+: Only when spec has blobHash/questionId/incentiveId/chainId
     }
 
     struct CommitData {
@@ -163,8 +160,8 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
     event LogRevealSpec(
         address indexed creator,
         bytes32 indexed specID,
-        bytes32 indexed commitmentId,
-        string ipfs,
+        bytes32 indexed blobHash,
+        bytes32 commitmentId,
         address targetContract,
         uint256 chainId
     );
@@ -172,8 +169,8 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
     event LogCreateSpec(
         address indexed creator,
         bytes32 indexed specID,
-        string ipfs,
-        address indexed targetContract,
+        bytes32 indexed blobHash,
+        address targetContract,
         uint256 chainId,
         uint256 timestamp,
         bytes32 incentiveId
@@ -225,7 +222,8 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         address indexed targetContract,
         bytes32 indexed specID,
         address indexed creator,
-        uint256 chainId
+        uint256 chainId,
+        bytes32 blobHash
     );
 
     event LogEmergencyPause(address indexed admin);
@@ -246,23 +244,17 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         address _realityETH,
         address _arbitrator,
         address _treasury,
-        address _metadataRegistry,
         uint256 _minBond,
         address[] memory _initialAdmins
     ) {
         if (_realityETH == address(0)) revert InvalidContract();
         if (_arbitrator == address(0)) revert InvalidContract();
         if (_treasury == address(0)) revert InvalidContract();
-        // Metadata registry can be zero and set later via setMetadataRegistry
         if (_initialAdmins.length == 0) revert Unauthorized();
 
         realityETH = _realityETH;
         arbitrator = _arbitrator;
         treasury = _treasury;
-        // Only set metadata registry if not zero address
-        if (_metadataRegistry != address(0)) {
-            metadataRegistry = MetadataRegistry(_metadataRegistry);
-        }
         minBond = _minBond;
 
         // Set up initial admins
@@ -285,10 +277,6 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         minBond = _minBond;
     }
 
-    function setMetadataRegistry(address _metadataRegistry) external onlyAdmin {
-        if (_metadataRegistry == address(0)) revert InvalidContract();
-        metadataRegistry = MetadataRegistry(_metadataRegistry);
-    }
 
     function addAdmin(address newAdmin) external onlyAdmin {
         _grantRole(ADMIN_ROLE, newAdmin);
@@ -421,19 +409,19 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
 
     function revealSpec(
         bytes32 commitmentId,
-        string calldata ipfs,
-        uint256 nonce,
-        bytes32 contentHash
+        bytes32 blobHash,
+        bytes32 metadataHash,
+        uint256 nonce
     ) external payable nonReentrant whenNotPaused returns (bytes32 specID) {
-        return _revealSpecInternal(commitmentId, ipfs, nonce, contentHash);
+        return _revealSpecInternal(commitmentId, blobHash, metadataHash, nonce);
     }
     
     
     function _revealSpecInternal(
         bytes32 commitmentId,
-        string calldata ipfs,
-        uint256 nonce,
-        bytes32 contentHash
+        bytes32 blobHash,
+        bytes32 metadataHash,
+        uint256 nonce
     ) internal returns (bytes32 specID) {
         CommitData storage commitment = commitments[commitmentId];
         
@@ -442,9 +430,9 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         if (commitment.isRevealed) revert CommitmentAlreadyRevealed();
         // If the commit has expired, no reveal is allowed.
         if (block.timestamp > commitment.revealDeadline) revert CommitmentExpired();
-        // Content hash is mandatory for proper validation
-        if (contentHash == bytes32(0)) revert InvalidReveal();
-
+        // Blob hash is mandatory for EIP-4844 blob reference
+        if (blobHash == bytes32(0)) revert InvalidReveal();
+        
         // Collect the bond at reveal time. Require it meets the minimum bond.
         // No platform fee is deducted - the full amount goes to the spec.
         if (msg.value < minBond) revert InsufficientBond();
@@ -454,29 +442,8 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         // Record the bond on the commitment. This replaces any bond recorded during commit.
         commitment.bondAmount = uint80(netBondAmount);
 
-        // Validate IPFS CID format
-        if (bytes(ipfs).length == 0 || bytes(ipfs).length > 256) revert InvalidIPFS();
-        {
-            bytes memory ipfsBytes = bytes(ipfs);
-            bytes memory delimBytes = bytes(unicode"␟");
-            if (ipfsBytes.length >= delimBytes.length) {
-                for (uint256 i = 0; i <= ipfsBytes.length - delimBytes.length; i++) {
-                    bool matchDelim = true;
-                    for (uint256 j = 0; j < delimBytes.length; j++) {
-                        if (ipfsBytes[i + j] != delimBytes[j]) {
-                            matchDelim = false;
-                            break;
-                        }
-                    }
-                    if (matchDelim) {
-                        revert InvalidIPFS();
-                    }
-                }
-            }
-        }
-
-        // Verify commitment: reconstruct the original commitmentId
-        bytes32 expectedCommitment = keccak256(abi.encodePacked(ipfs, nonce));
+        // Verify commitment: use metadataHash instead of blobHash for verification
+        bytes32 expectedCommitment = keccak256(abi.encodePacked(metadataHash, nonce));
         bytes32 reconstructedCommitmentId = keccak256(abi.encodePacked(
             expectedCommitment,
             commitment.committer,
@@ -489,7 +456,7 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
 
         // Create spec ID
         specID = keccak256(abi.encodePacked(
-            ipfs,
+            blobHash,
             commitment.targetContract,
             commitment.chainId,
             msg.sender,
@@ -501,7 +468,7 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         // Mark commitment as revealed
         commitment.isRevealed = true;
 
-        // Create spec (note: bondsSettled removed)
+        // Create spec and store ERC7730 JSON
         specs[specID] = ERC7730Spec({
             createdTimestamp: uint64(block.timestamp),
             proposedTimestamp: 0,
@@ -510,12 +477,14 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
             reserved: 0,
             creator: msg.sender,
             targetContract: commitment.targetContract,
-            ipfs: ipfs,
+            blobHash: blobHash,
             questionId: bytes32(0),
             incentiveId: bytes32(0),
-            chainId: commitment.chainId,
-            metadataContentHash: contentHash
+            chainId: commitment.chainId
         });
+        
+        // Store the blob hash
+        specBlobHash[specID] = blobHash;
 
         // Index by contract and chain
         contractSpecs[commitment.chainId][commitment.targetContract].push(specID);
@@ -524,8 +493,8 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         emit LogRevealSpec(
             msg.sender,
             specID,
+            blobHash,
             commitmentId,
-            ipfs,
             commitment.targetContract,
             commitment.chainId
         );
@@ -533,7 +502,7 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         emit LogCreateSpec(
             msg.sender,
             specID,
-            ipfs,
+            blobHash,
             commitment.targetContract,
             commitment.chainId,
             block.timestamp,
@@ -544,7 +513,8 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
             commitment.targetContract,
             specID,
             msg.sender,
-            commitment.chainId
+            commitment.chainId,
+            blobHash
         );
 
         // Auto-propose if enough bond was provided
@@ -597,7 +567,7 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         // INTERACTIONS: create Reality.eth question using the total bond
         string memory delim = unicode"␟";
         string memory questionParams = string(abi.encodePacked(
-            spec.ipfs,
+            _bytes32ToString(spec.blobHash),
             delim,
             _addressToString(spec.targetContract),
             delim,
@@ -633,14 +603,8 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         emit LogHandleResult(specID, specAccepted);
 
         if (specAccepted) {
-            // Attest the metadata to the registry using the content hash
-            // Content hash is always required - no fallback to URI hash
-            bytes32 metadataHash = spec.metadataContentHash;
-            
-            // Attest to the metadata registry
-            if (address(metadataRegistry) != address(0)) {
-                metadataRegistry.attestMetadata(metadataHash);
-            }
+            // Blob hash is stored in the contract
+            // Metadata is in the blob sidecar referenced by blobHash
             
             // Claim from the incentive pool for this contract/chain
             uint256 poolAmount = incentivePool[spec.chainId][spec.targetContract];
@@ -759,6 +723,12 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
     function getIncentivePool(address targetContract, uint256 chainId) external view returns (uint256 poolAmount, uint256 contributorCount) {
         return (incentivePool[chainId][targetContract], poolContributorCount[chainId][targetContract]);
     }
+    
+    
+    function getSpecBlobHash(bytes32 specID) external view returns (bytes32) {
+        return specBlobHash[specID];
+    }
+    
 
     // =============================================================================
     //                              UTILITY FUNCTIONS
@@ -794,6 +764,18 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
             value /= 10;
         }
         return string(buffer);
+    }
+    
+    function _bytes32ToString(bytes32 value) internal pure returns (string memory) {
+        bytes memory alphabet = "0123456789abcdef";
+        bytes memory str = new bytes(66); // "0x" + 64 characters
+        str[0] = "0";
+        str[1] = "x";
+        for (uint256 i = 0; i < 32; i++) {
+            str[2 + i * 2] = alphabet[uint8(value[i] >> 4)];
+            str[3 + i * 2] = alphabet[uint8(value[i] & 0x0f)];
+        }
+        return string(str);
     }
 
 }
