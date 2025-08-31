@@ -114,9 +114,9 @@ contract AuditTests is Test {
         );
         
         // Commit spec from attacker
-        string memory ipfs = "QmTest123";
+        string memory blobData = "QmTest123";
         uint256 nonce = 12345;
-        bytes32 metadataHash = keccak256(abi.encodePacked(ipfs, "metadata"));
+        bytes32 metadataHash = keccak256(abi.encodePacked(blobData, "metadata"));
         bytes32 commitment = keccak256(abi.encodePacked(metadataHash, nonce));
         
         vm.prank(address(reentrancyAttacker));
@@ -131,7 +131,7 @@ contract AuditTests is Test {
         ));
         
         vm.prank(address(reentrancyAttacker));
-        bytes32 blobHash = keccak256(abi.encodePacked(ipfs));
+        bytes32 blobHash = keccak256(abi.encodePacked(blobData));
         bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, metadataHash, nonce);
         
         // Get questionId and mock acceptance
@@ -208,7 +208,7 @@ contract AuditTests is Test {
         // Now create and finalize a spec to claim the entire pool
         vm.startPrank(user4);
         
-        // Create commitment hash from IPFS and nonce
+        // Create commitment hash from blob and nonce
         uint256 nonce = 12345;
         bytes32 blobHash = keccak256(abi.encodePacked("test_spec"));
         bytes32 metadataHash = keccak256(abi.encodePacked("test_spec", "metadata"));
@@ -285,9 +285,9 @@ contract AuditTests is Test {
         );
         
         // Create and accept spec
-        string memory ipfs = "QmTest123";
+        string memory blobData = "QmTest123";
         uint256 nonce = 12345;
-        bytes32 metadataHash = keccak256(abi.encodePacked(ipfs, "metadata"));
+        bytes32 metadataHash = keccak256(abi.encodePacked(blobData, "metadata"));
         bytes32 commitment = keccak256(abi.encodePacked(metadataHash, nonce));
         
         vm.prank(user2);
@@ -302,7 +302,7 @@ contract AuditTests is Test {
         ));
         
         vm.prank(user2);
-        bytes32 blobHash = keccak256(abi.encodePacked(ipfs));
+        bytes32 blobHash = keccak256(abi.encodePacked(blobData));
         bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, metadataHash, nonce);
         
         // Get the actual questionId from the spec  
@@ -360,11 +360,11 @@ contract AuditTests is Test {
         );
     }
     
-    function testIPFSValidation() public {
-        // Test empty IPFS
-        string memory ipfs = "";
+    function testBlobValidation() public {
+        // Test empty blob
+        string memory blobData = "";
         uint256 nonce = 12345;
-        bytes32 metadataHash = keccak256(abi.encodePacked(ipfs, "metadata"));
+        bytes32 metadataHash = keccak256(abi.encodePacked(blobData, "metadata"));
         bytes32 commitment = keccak256(abi.encodePacked(metadataHash, nonce));
         
         vm.prank(user1);
@@ -384,9 +384,9 @@ contract AuditTests is Test {
     }
     
     function testCommitmentTimeout() public {
-        string memory ipfs = "QmTest123";
+        string memory blobData = "QmTest123";
         uint256 nonce = 12345;
-        bytes32 metadataHash = keccak256(abi.encodePacked(ipfs, "metadata"));
+        bytes32 metadataHash = keccak256(abi.encodePacked(blobData, "metadata"));
         bytes32 commitment = keccak256(abi.encodePacked(metadataHash, nonce));
         
         vm.prank(user1);
@@ -401,7 +401,7 @@ contract AuditTests is Test {
         ));
         
         vm.prank(user1);
-        bytes32 blobHash = keccak256(abi.encodePacked(ipfs));
+        bytes32 blobHash = keccak256(abi.encodePacked(blobData));
         vm.expectRevert(KaiSign.CommitmentExpired.selector);
         kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, metadataHash, nonce);
     }
@@ -438,9 +438,9 @@ contract AuditTests is Test {
     // =============================================================================
     
     function testDoubleReveal() public {
-        string memory ipfs = "QmTest123";
+        string memory blobData = "QmTest123";
         uint256 nonce = 12345;
-        bytes32 metadataHash = keccak256(abi.encodePacked(ipfs, "metadata"));
+        bytes32 metadataHash = keccak256(abi.encodePacked(blobData, "metadata"));
         bytes32 commitment = keccak256(abi.encodePacked(metadataHash, nonce));
         
         vm.prank(user1);
@@ -454,7 +454,7 @@ contract AuditTests is Test {
         ));
         
         vm.prank(user1);
-        bytes32 blobHash = keccak256(abi.encodePacked(ipfs));
+        bytes32 blobHash = keccak256(abi.encodePacked(blobData));
         kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, metadataHash, nonce);
         
         // Try to reveal again
@@ -465,9 +465,9 @@ contract AuditTests is Test {
     
     function testDoubleProposal() public {
         // Create and reveal spec
-        string memory ipfs = "QmTest123";
+        string memory blobData = "QmTest123";
         uint256 nonce = 12345;
-        bytes32 metadataHash = keccak256(abi.encodePacked(ipfs, "metadata"));
+        bytes32 metadataHash = keccak256(abi.encodePacked(blobData, "metadata"));
         bytes32 commitment = keccak256(abi.encodePacked(metadataHash, nonce));
         
         vm.prank(user1);
@@ -481,7 +481,7 @@ contract AuditTests is Test {
         ));
         
         vm.prank(user1);
-        bytes32 blobHash = keccak256(abi.encodePacked(ipfs));
+        bytes32 blobHash = keccak256(abi.encodePacked(blobData));
         bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, metadataHash, nonce);
         
         // Try to propose again (should be auto-proposed already)
@@ -525,9 +525,9 @@ contract AuditTests is Test {
         );
         
         // Commit spec
-        string memory ipfs = "QmTest123";
+        string memory blobData = "QmTest123";
         uint256 nonce = 12345;
-        bytes32 metadataHash = keccak256(abi.encodePacked(ipfs, "metadata"));
+        bytes32 metadataHash = keccak256(abi.encodePacked(blobData, "metadata"));
         bytes32 commitment = keccak256(abi.encodePacked(metadataHash, nonce));
         
         vm.prank(user2);
@@ -542,7 +542,7 @@ contract AuditTests is Test {
         ));
         
         vm.prank(user2);
-        bytes32 blobHash = keccak256(abi.encodePacked(ipfs));
+        bytes32 blobHash = keccak256(abi.encodePacked(blobData));
         bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, metadataHash, nonce);
         
         // Verify spec was auto-proposed

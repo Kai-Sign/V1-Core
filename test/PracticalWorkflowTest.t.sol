@@ -33,8 +33,8 @@ contract PracticalWorkflowTest is Test {
     // Real ERC-7730 metadata for KaiSign contract
     string constant ERC7730_KAISIGN_METADATA = '{"metadata":{"name":"KaiSign Protocol","description":"Clear signing metadata for decentralized contract verification","version":"1.0.0","chainId":1},"display":{"formats":{"createIncentive":[{"label":"Create Incentive","fields":[{"path":"targetContract","label":"Target Contract","format":"address"},{"path":"amount","label":"Incentive Amount","format":"amount"}],"primary":["targetContract","amount"]}],"proposeSpec":[{"label":"Propose Specification","fields":[{"path":"specId","label":"Specification ID","format":"bytes32"}],"primary":["specId"]}],"handleResult":[{"label":"Handle Result","fields":[{"path":"specId","label":"Specification ID","format":"bytes32"},{"path":"accepted","label":"Specification Accepted","format":"bool"}],"primary":["specId","accepted"]}]}}}';
     
-    // IPFS hash for the metadata (would be real IPFS hash in practice)
-    string constant METADATA_IPFS = "QmKaiSignERC7730MetadataV1HashExampleFor32CharactersMin";
+    // Blob hash for the metadata (would be real blob hash in practice)
+    string constant METADATA_BLOB = "QmKaiSignERC7730MetadataV1HashExampleFor32CharactersMin";
     
     // Calculate the actual metadata hash
     bytes32 constant METADATA_HASH = bytes32(keccak256(bytes(ERC7730_KAISIGN_METADATA)));
@@ -68,7 +68,7 @@ contract PracticalWorkflowTest is Test {
         console.log("=== KAISIGN PRACTICAL WORKFLOW TEST ===");
         console.log("Target Contract:", testTarget);
         console.log("Incentive Amount:", INCENTIVE_AMOUNT);
-        console.log("Metadata IPFS:", METADATA_IPFS);
+        console.log("Metadata Blob:", METADATA_BLOB);
         console.logBytes32(METADATA_HASH);
     }
     
@@ -124,10 +124,10 @@ contract PracticalWorkflowTest is Test {
         // Step 2: Metadata Provider commits their metadata specification
         vm.startPrank(metadataProvider);
         
-        // Create commitment hash from IPFS and nonce
+        // Create commitment hash from blob and nonce
         uint256 nonce = 12345;
-        bytes32 blobHash = keccak256(abi.encodePacked(METADATA_IPFS));
-        bytes32 metadataHash = keccak256(abi.encodePacked(METADATA_IPFS, "metadata"));
+        bytes32 blobHash = keccak256(abi.encodePacked(METADATA_BLOB));
+        bytes32 metadataHash = keccak256(abi.encodePacked(METADATA_BLOB, "metadata"));
         bytes32 commitment = keccak256(abi.encodePacked(metadataHash, nonce));
         
         // Record logs to capture commitment ID
@@ -309,7 +309,7 @@ contract PracticalWorkflowTest is Test {
         console.log("\n=== METADATA VERIFICATION ===");
         console.log("ERC-7730 Metadata Content:");
         console.log(ERC7730_KAISIGN_METADATA);
-        console.log("\nIPFS Reference:", METADATA_IPFS);
+        console.log("\nBlob Reference:", METADATA_BLOB);
         console.log("Blob hash stored on-chain: TRUE");
         console.log("Specification Finalized: TRUE");
     }
