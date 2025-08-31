@@ -15,7 +15,6 @@ contract DeployKaiSign is Script {
         address realityETH = 0xaf33DcB6E8c5c4D9dDF579f53031b514d19449CA; // Reality.eth contract on Sepolia
         address arbitrator = 0x05B942fAEcfB3924970E3A28e0F230910CEDFF45; // Arbitrator address
         address treasury = 0x7D8730aD11f0D421bd41c6E5584F20c744CBAf29; // Treasury address
-        address metadataRegistryAddress = 0xE0BDb7d03D572707317d714d57609f35D1699208; // MetadataRegistry address to set at deploy
         uint256 minBond = 10000000000000000; // 0.01 ETH
         address[] memory initialAdmins = new address[](1);
         initialAdmins[0] = msg.sender;
@@ -31,7 +30,6 @@ contract DeployKaiSign is Script {
                     realityETH,
                     arbitrator,
                     treasury,
-                    metadataRegistryAddress, // pass registry in constructor
                     minBond,
                     initialAdmins
                 )
@@ -45,7 +43,6 @@ contract DeployKaiSign is Script {
             realityETH,
             arbitrator,
             treasury,
-            metadataRegistryAddress, // set here to avoid post-deploy auth issues
             minBond,
             initialAdmins
         );
@@ -53,8 +50,6 @@ contract DeployKaiSign is Script {
         console.log("KaiSign deployed to:", address(kaisign));
         console.log("Address matches prediction:", address(kaisign) == predictedAddress);
         console.log("Salt used:", vm.toString(salt));
-        
-        // No post-deploy setMetadataRegistry call needed — registry provided in constructor
         
         vm.stopBroadcast();
     }

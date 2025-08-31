@@ -4,7 +4,6 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "../src/KaiSign.sol";
-import "../src/MetadataRegistry.sol";
 import "../staticlib/RealityETH-3.0.sol";
 
 /**
@@ -13,7 +12,6 @@ import "../staticlib/RealityETH-3.0.sol";
  */
 contract PracticalWorkflowTest is Test {
     KaiSign kaisign;
-    MetadataRegistry registry;
     RealityETH_v3_0 realityETH;
     
     // Different addresses for different roles
@@ -46,7 +44,6 @@ contract PracticalWorkflowTest is Test {
     function setUp() public {
         // Deploy contracts
         realityETH = new RealityETH_v3_0();
-        registry = new MetadataRegistry();
         
         vm.startPrank(admin);
         address[] memory admins = new address[](1);
@@ -56,7 +53,6 @@ contract PracticalWorkflowTest is Test {
             address(realityETH),
             arbitrator,
             treasury,
-            address(registry),
             MIN_BOND,
             admins
         );
@@ -130,7 +126,9 @@ contract PracticalWorkflowTest is Test {
         
         // Create commitment hash from IPFS and nonce
         uint256 nonce = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(METADATA_IPFS, nonce));
+        bytes32 blobHash = keccak256(abi.encodePacked(METADATA_IPFS));
+        bytes32 metadataHash = keccak256(abi.encodePacked(METADATA_IPFS, "metadata"));
+        bytes32 commitment = keccak256(abi.encodePacked(metadataHash, nonce));
         
         // Record logs to capture commitment ID
         vm.recordLogs();
@@ -161,12 +159,12 @@ contract PracticalWorkflowTest is Test {
         
         vm.startPrank(metadataProvider);
         
-        // Reveal with content hash (the actual ERC-7730 JSON hash)
+        // Reveal with blob hash and metadata hash
         bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(
             commitmentId,
-            METADATA_IPFS,
-            nonce,
-            METADATA_HASH
+            blobHash,
+            metadataHash,
+            nonce
         );
         
         vm.stopPrank();
@@ -186,18 +184,16 @@ contract PracticalWorkflowTest is Test {
             ,
             address specCreator,
             address specTarget,
-            string memory ipfs,
+            bytes32 blobHashFromSpec,
             bytes32 questionId,
             ,
-            uint256 specChainId,
-            bytes32 metadataContentHash
+            uint256 specChainId
         ) = kaisign.specs(specId);
         
         assertEq(specCreator, metadataProvider);
         assertEq(specTarget, testTarget);
-        assertEq(ipfs, METADATA_IPFS);
+        assertEq(blobHashFromSpec, blobHash);
         assertEq(specChainId, targetChainId);
-        assertEq(metadataContentHash, METADATA_HASH);
         assertEq(uint256(status), uint256(KaiSign.Status.Proposed));
         assertEq(uint256(totalBonds), MIN_BOND);
         assertTrue(questionId != bytes32(0)); // Question should be created
@@ -206,44 +202,22 @@ contract PracticalWorkflowTest is Test {
         console.logBytes32(specId);
         console.log("[OK] Reality.eth question ID:");
         console.logBytes32(questionId);
-        console.log("[OK] IPFS hash:", ipfs);
-        console.log("[OK] Metadata content hash:");
-        console.logBytes32(metadataContentHash);
+        console.log("[OK] Blob hash:");
+        console.logBytes32(blobHashFromSpec);
         
-        console.log("\n=== STEP 4: METADATA REGISTRY ATTESTATION ===");
+        console.log("\n=== STEP 4: BLOB DATA STORED ON-CHAIN ===");
         
-        // Step 4: Attest the metadata in the registry
-        vm.startPrank(metadataProvider);
-        
-        registry.attestMetadata(METADATA_HASH);
-        
-        vm.stopPrank();
-        
-        // Set up trusted attesters (in practice, this would be community governance)
-        // The incentive creator trusts the metadata provider
-        vm.startPrank(incentiveCreator);
-        
-        address[] memory attesters = new address[](1);
-        attesters[0] = metadataProvider;
-        
-        registry.trustAttesters(1, attesters, new address[](0), new address[](0));
-        
-        vm.stopPrank();
+        // Step 4: Blob hash and metadata hash are now stored on-chain
+        // This replaces the need for attestation registry
         
         emit WorkflowStep(
-            "Metadata Attested", 
+            "Blob Data Stored", 
             metadataProvider, 
-            "ERC-7730 metadata hash attested in MetadataRegistry"
+            "ERC-7730 metadata stored via blob storage"
         );
         
-        // Verify attestation
-        assertTrue(registry.hasAttested(METADATA_HASH, metadataProvider));
-        // Check approval from incentive creator's perspective
-        assertTrue(registry.approvedForAccount(METADATA_HASH, incentiveCreator));
-        assertEq(registry.attestationCount(METADATA_HASH), 1);
-        
-        console.log("[OK] Metadata hash attested in registry");
-        console.log("[OK] Attestation approved by governance");
+        console.log("[OK] Blob hash stored on-chain");
+        console.log("[OK] Metadata hash stored on-chain");
         
         console.log("\n=== STEP 5: COMMUNITY VOTING ON REALITY.ETH ===");
         
@@ -299,7 +273,7 @@ contract PracticalWorkflowTest is Test {
         );
         
         // Verify final state
-        (, , KaiSign.Status finalStatus, , , , , , , , , ) = kaisign.specs(specId);
+        (, , KaiSign.Status finalStatus, , , , , , , , ) = kaisign.specs(specId);
         assertEq(uint256(finalStatus), uint256(KaiSign.Status.Finalized));
         
         // Verify incentive pool was claimed (should now be empty)
@@ -326,7 +300,7 @@ contract PracticalWorkflowTest is Test {
         console.log("\n=== WORKFLOW COMPLETED SUCCESSFULLY ===");
         console.log("SUMMARY:");
         console.log("- Target contract now has verified ERC-7730 metadata");
-        console.log("- Metadata is attested in MetadataRegistry");
+        console.log("- Metadata is stored on-chain via blob storage");
         console.log("- Community validated the specification quality");
         console.log("- Economic incentives properly distributed");
         console.log("- Clear signing enabled for DeFi integration");
@@ -336,7 +310,7 @@ contract PracticalWorkflowTest is Test {
         console.log("ERC-7730 Metadata Content:");
         console.log(ERC7730_KAISIGN_METADATA);
         console.log("\nIPFS Reference:", METADATA_IPFS);
-        console.log("Registry Approved:", registry.approvedForAccount(METADATA_HASH, incentiveCreator));
+        console.log("Blob hash stored on-chain: TRUE");
         console.log("Specification Finalized: TRUE");
     }
     
@@ -357,7 +331,9 @@ contract PracticalWorkflowTest is Test {
         // Commit and reveal poor quality spec
         vm.startPrank(metadataProvider);
         uint256 nonce = 54321;
-        bytes32 commitment = keccak256(abi.encodePacked("QmPoorQualitySpec123", nonce));
+        bytes32 blobHash = keccak256(abi.encodePacked("QmPoorQualitySpec123"));
+        bytes32 metadataHash = keccak256(abi.encodePacked("QmPoorQualitySpec123", "metadata"));
+        bytes32 commitment = keccak256(abi.encodePacked(metadataHash, nonce));
         
         vm.recordLogs();
         kaisign.commitSpec(commitment, testTarget, targetChainId);
@@ -367,20 +343,24 @@ contract PracticalWorkflowTest is Test {
         
         vm.warp(block.timestamp + 1 hours);
         
-        bytes32 contentHash = keccak256(abi.encodePacked("QmPoorQualitySpec123", "content"));
         bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(
             commitmentId,
-            "QmPoorQualitySpec123",
-            nonce,
-            contentHash
+            blobHash,
+            metadataHash,
+            nonce
         );
         
         vm.stopPrank();
         
         // Community rejects the specification
-        (, , , , , , , , bytes32 questionId, , , ) = kaisign.specs(specId);
+        (, , , , , , , , bytes32 questionId, , ) = kaisign.specs(specId);
+        
+        // The question needs to be created in RealityETH first
+        // This happens when the spec is proposed - let's ensure it exists
+        assertTrue(questionId != bytes32(0), "Question ID should exist");
         
         vm.startPrank(voter1);
+        // First parameter is questionId, not blobHash
         realityETH.submitAnswer{value: MIN_BOND}(questionId, bytes32(uint256(0)), 0); // Vote NO (0)
         vm.stopPrank();
         
@@ -397,7 +377,7 @@ contract PracticalWorkflowTest is Test {
         vm.stopPrank();
         
         // Verify spec was rejected and incentive remains unclaimed
-        (, , KaiSign.Status finalStatus, , , , , , , , , ) = kaisign.specs(specId);
+        (, , KaiSign.Status finalStatus, , , , , , , , ) = kaisign.specs(specId);
         assertEq(uint256(finalStatus), uint256(KaiSign.Status.Finalized));
         
         // Verify incentive pool remains unclaimed (should still have the original amount)
