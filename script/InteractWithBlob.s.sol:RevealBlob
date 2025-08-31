@@ -1,0 +1,6 @@
+Script started on Sat Aug 23 22:03:51 2025
+Command: --rpc-url https://eth-sepolia.g.alchemy.com/v2/1EFr4OH_BpQp-qxV_7Vv5 --keystore kaisignblob --broadcast --value 0.01ether -vvv
+script: --rpc-url: No such file or directory
+
+Command exit status: 1
+Script done on Sat Aug 23 22:03:51 2025

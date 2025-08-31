@@ -4,6 +4,7 @@ out = "out"
 libs = ["lib"]
 remappings = [
     "@openzeppelin/=lib/openzeppelin-contracts/",
+    "@account-abstraction/=lib/account-abstraction/",
     "forge-std/=lib/forge-std/src/"
 ]
 solc_version = "0.8.20"
@@ -23,6 +24,7 @@ out = "out"
 libs = ["lib"]
 remappings = [
     "@openzeppelin/=lib/openzeppelin-contracts/",
+    "@account-abstraction/=lib/account-abstraction/",
     "forge-std/=lib/forge-std/src/"
 ]
 solc_version = "0.8.20"

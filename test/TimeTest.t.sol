@@ -61,7 +61,7 @@ contract TimeTest is Test {
         ));
         
         vm.prank(user);
-        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
         
         // Should be auto-proposed
         bytes32 specId = keccak256(abi.encodePacked(
@@ -94,7 +94,7 @@ contract TimeTest is Test {
         // Reveal should fail
         vm.prank(user);
         vm.expectRevert(KaiSign.CommitmentExpired.selector);
-        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
     }
     
     // Test incentive deadline
@@ -122,7 +122,7 @@ contract TimeTest is Test {
         ));
         
         vm.prank(user);
-        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
         
         // Get question ID and mock acceptance
         (,,,,,,,, bytes32 questionId,,) = kaisign.specs(specId);
@@ -222,7 +222,7 @@ contract TimeTest is Test {
         vm.warp(block.timestamp + 30 minutes);
         
         vm.prank(user);
-        bytes32 specId1 = kaisign.revealSpec{value: MIN_BOND}(commitmentId1, blobHash1, nonce1);
+        bytes32 specId1 = kaisign.revealSpec{value: MIN_BOND}(commitmentId1, blobHash1, blobHash1, nonce1);
         
         // Create second spec
         bytes32 blobHash2 = keccak256("blob-2");
@@ -241,7 +241,7 @@ contract TimeTest is Test {
         vm.warp(block.timestamp + 30 minutes);
         
         vm.prank(user);
-        bytes32 specId2 = kaisign.revealSpec{value: MIN_BOND}(commitmentId2, blobHash2, nonce2);
+        bytes32 specId2 = kaisign.revealSpec{value: MIN_BOND}(commitmentId2, blobHash2, blobHash2, nonce2);
         
         // Both should be proposed
         (,, KaiSign.Status status1,,,,,,,,) = kaisign.specs(specId1);
@@ -312,7 +312,7 @@ contract TimeTest is Test {
         ));
         
         vm.prank(user);
-        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
         
         // Check DEFAULT_TIMEOUT is used
         assertEq(kaisign.DEFAULT_TIMEOUT(), 48 hours);

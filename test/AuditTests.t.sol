@@ -141,7 +141,7 @@ contract AuditTests is Test {
         ));
         
         vm.prank(address(reentrancyAttacker));
-        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
         
         // Get questionId and mock acceptance
         (,,,,,address creator, address targetContract, bytes32 blobHashFromSpec, bytes32 questionId, bytes32 specIncentiveId, uint256 specChainId) = kaisign.specs(specId);
@@ -219,7 +219,7 @@ contract AuditTests is Test {
         ));
         
         vm.prank(user2);
-        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
         
         bytes32 specId = keccak256(abi.encodePacked(
             blobHash, target, chainId, user2, commitTime
@@ -298,7 +298,7 @@ contract AuditTests is Test {
         
         vm.prank(user1);
         vm.expectRevert(KaiSign.InvalidReveal.selector);
-        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
     }
     
     function testCommitmentTimeout() public {
@@ -319,7 +319,7 @@ contract AuditTests is Test {
         
         vm.prank(user1);
         vm.expectRevert(KaiSign.CommitmentExpired.selector);
-        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
     }
     
     function testIncentiveClawbackTiming() public {
@@ -381,7 +381,7 @@ contract AuditTests is Test {
         // Now reveal all specs
         for (uint i = 0; i < 10; i++) {
             vm.prank(user1);
-            specIds[i] = kaisign.revealSpec{value: MIN_BOND}(commitmentIds[i], blobHashes[i], nonces[i]);
+            specIds[i] = kaisign.revealSpec{value: MIN_BOND}(commitmentIds[i], blobHashes[i], blobHashes[i], nonces[i]);
         }
         
         // Should be able to query all specs without gas issues
@@ -422,7 +422,7 @@ contract AuditTests is Test {
         // Now reveal all specs
         for (uint i = 0; i < 5; i++) {
             vm.prank(user1);
-            kaisign.revealSpec{value: MIN_BOND}(commitmentIds[i], blobHashes[i], nonces[i]);
+            kaisign.revealSpec{value: MIN_BOND}(commitmentIds[i], blobHashes[i], blobHashes[i], nonces[i]);
         }
         
         // Test pagination
@@ -457,12 +457,12 @@ contract AuditTests is Test {
         ));
         
         vm.prank(user1);
-        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
         
         // Try to reveal again
         vm.prank(user1);
         vm.expectRevert(KaiSign.CommitmentAlreadyRevealed.selector);
-        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
     }
     
     function testDoubleProposal() public {
@@ -482,7 +482,7 @@ contract AuditTests is Test {
         ));
         
         vm.prank(user1);
-        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
         
         // Try to propose again (should be auto-proposed already)
         vm.prank(user2);
@@ -497,11 +497,11 @@ contract AuditTests is Test {
         
         // All user functions should revert when paused
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        vm.expectRevert("Pausable: paused");
         kaisign.commitSpec(keccak256("test"), target, 1);
         
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        vm.expectRevert("Pausable: paused");
         kaisign.createIncentive{value: 1 ether}(target, 1, 1 ether, 7 days, "test");
         
         // Unpause
@@ -541,7 +541,7 @@ contract AuditTests is Test {
         ));
         
         vm.prank(user2);
-        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
         
         // Verify spec was auto-proposed
         (,, KaiSign.Status status,,,,,,,,) = kaisign.specs(specId);
@@ -602,7 +602,7 @@ contract ReentrancyAttacker {
         ));
         shouldAttack = true;
         attacked = false;
-        target.revealSpec{value: 0.01 ether}(commitmentId, blobHash, nonce);
+        target.revealSpec{value: 0.01 ether}(commitmentId, blobHash, blobHash, nonce);
     }
     
     // This will be called when ETH is transferred to this contract

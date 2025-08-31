@@ -1,0 +1,22 @@
+{
+  "name": "v1-core-blob-deployment",
+  "version": "1.0.0",
+  "description": "EIP-4844 Blob deployment for KaiSign",
+  "main": "deployBlob.js",
+  "scripts": {
+    "deploy:blob": "node deployBlob.js"
+  },
+  "dependencies": {
+    "c-kzg": "^4.1.0",
+    "dotenv": "^17.2.1",
+    "ethers": "^6.15.0"
+  },
+  "keywords": [
+    "eip-4844",
+    "blob",
+    "ethereum",
+    "base"
+  ],
+  "author": "",
+  "license": "Apache-2.0"
+}

@@ -95,6 +95,7 @@ contract BlobSpecTest is Test {
         bytes32 specID = kaisign.revealSpec{value: MIN_BOND}(
             commitmentId,
             SAMPLE_BLOB_HASH,
+            SAMPLE_BLOB_HASH,
             nonce
         );
         
@@ -127,6 +128,7 @@ contract BlobSpecTest is Test {
         
         bytes32 specID = kaisign.revealSpec{value: MIN_BOND}(
             commitmentId,
+            blobHash,
             blobHash,
             nonce
         );
@@ -163,6 +165,7 @@ contract BlobSpecTest is Test {
         kaisign.revealSpec{value: MIN_BOND}(
             commitmentId,
             bytes32(0),
+            bytes32(0),
             nonce
         );
         
@@ -192,6 +195,7 @@ contract BlobSpecTest is Test {
         // Reveal with sufficient bond to auto-propose
         bytes32 specID = kaisign.revealSpec{value: MIN_BOND * 2}(
             commitmentId,
+            SAMPLE_BLOB_HASH,
             SAMPLE_BLOB_HASH,
             nonce
         );
@@ -234,6 +238,7 @@ contract BlobSpecTest is Test {
             
             specIDs[i] = kaisign.revealSpec{value: MIN_BOND}(
                 commitmentId,
+                blobHashes[i],
                 blobHashes[i],
                 nonce
             );
@@ -278,6 +283,7 @@ contract BlobSpecTest is Test {
         
         kaisign.revealSpec{value: MIN_BOND}(
             commitmentId,
+            SAMPLE_BLOB_HASH,
             SAMPLE_BLOB_HASH,
             nonce
         );

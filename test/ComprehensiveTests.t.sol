@@ -336,7 +336,7 @@ contract ComprehensiveTests is Test {
         ));
         
         vm.prank(user1);
-        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
         
         // Check spec was created
         (uint64 createdTimestamp, uint64 proposedTimestamp, KaiSign.Status status, uint80 totalBonds,, address creator, address targetContract, bytes32 specBlobHash, bytes32 questionId, bytes32 specIncentiveId, uint256 chainId) = kaisign.specs(specId);
@@ -365,7 +365,7 @@ contract ComprehensiveTests is Test {
         bytes32 fakeCommitmentId = keccak256("fake");
         vm.prank(user1);
         vm.expectRevert(KaiSign.CommitmentNotFound.selector);
-        kaisign.revealSpec{value: MIN_BOND}(fakeCommitmentId, blobHash, nonce);
+        kaisign.revealSpec{value: MIN_BOND}(fakeCommitmentId, blobHash, blobHash, nonce);
         
         // Commit first
         vm.prank(user1);
@@ -379,13 +379,13 @@ contract ComprehensiveTests is Test {
         // Wrong user tries to reveal
         vm.prank(user2);
         vm.expectRevert(KaiSign.InvalidReveal.selector);
-        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
         
         // Reveal after timeout
         vm.warp(block.timestamp + 2 hours);
         vm.prank(user1);
         vm.expectRevert(KaiSign.CommitmentExpired.selector);
-        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
         
         // New commit for further tests
         vm.prank(user1);
@@ -399,26 +399,26 @@ contract ComprehensiveTests is Test {
         // Reveal with empty blob hash
         vm.prank(user1);
         vm.expectRevert(KaiSign.InvalidReveal.selector);
-        kaisign.revealSpec{value: MIN_BOND}(commitmentId, bytes32(0), nonce);
+        kaisign.revealSpec{value: MIN_BOND}(commitmentId, bytes32(0), bytes32(0), nonce);
         
         // Reveal with insufficient bond
         vm.prank(user1);
         vm.expectRevert(KaiSign.InsufficientBond.selector);
-        kaisign.revealSpec{value: MIN_BOND - 1}(commitmentId, blobHash, nonce);
+        kaisign.revealSpec{value: MIN_BOND - 1}(commitmentId, blobHash, blobHash, nonce);
         
         // Reveal with wrong nonce (invalid reveal)
         vm.prank(user1);
         vm.expectRevert(KaiSign.InvalidReveal.selector);
-        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce + 1);
+        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce + 1);
         
         // Successful reveal
         vm.prank(user1);
-        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
         
         // Try to reveal again
         vm.prank(user1);
         vm.expectRevert(KaiSign.CommitmentAlreadyRevealed.selector);
-        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
     }
     
     function testRevealWithLargeBond() public {
@@ -436,7 +436,7 @@ contract ComprehensiveTests is Test {
         
         // Reveal with larger bond than minimum
         vm.prank(user1);
-        bytes32 specId = kaisign.revealSpec{value: 1 ether}(commitmentId, blobHash, nonce);
+        bytes32 specId = kaisign.revealSpec{value: 1 ether}(commitmentId, blobHash, blobHash, nonce);
         
         (,,, uint80 totalBonds,,,,,,,) = kaisign.specs(specId);
         assertEq(totalBonds, 1 ether);
@@ -465,7 +465,7 @@ contract ComprehensiveTests is Test {
         
         // Reveal with exact minBond - this will auto-propose
         vm.prank(user1);
-        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
         
         // Check status is automatically Proposed
         (,, KaiSign.Status status, uint80 totalBonds,,,,,,,) = kaisign.specs(specId);
@@ -499,7 +499,7 @@ contract ComprehensiveTests is Test {
         ));
         
         vm.prank(user1);
-        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
         
         // Try to propose already proposed spec
         vm.prank(user2);
@@ -528,7 +528,7 @@ contract ComprehensiveTests is Test {
         ));
         
         vm.prank(user2);
-        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
         
         // Get question ID
         (,,,,,,,, bytes32 questionId,,) = kaisign.specs(specId);
@@ -576,7 +576,7 @@ contract ComprehensiveTests is Test {
         ));
         
         vm.prank(user1);
-        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
         
         // Get question ID
         (,,,,,,,, bytes32 questionId,,) = kaisign.specs(specId);
@@ -614,7 +614,7 @@ contract ComprehensiveTests is Test {
         ));
         
         vm.prank(user1);
-        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
         
         // Get question ID
         (,,,,,,,, bytes32 questionId,,) = kaisign.specs(specId);
@@ -650,7 +650,7 @@ contract ComprehensiveTests is Test {
             ));
             
             vm.prank(user1);
-            kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+            kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
             
             vm.warp(block.timestamp + 1);
         }
@@ -675,7 +675,7 @@ contract ComprehensiveTests is Test {
             ));
             
             vm.prank(user1);
-            kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+            kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
             
             vm.warp(block.timestamp + 1);
         }
@@ -716,7 +716,7 @@ contract ComprehensiveTests is Test {
         ));
         
         vm.prank(user1);
-        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
         
         assertEq(kaisign.getContractSpecCount(target1, 1), 1);
     }
@@ -774,7 +774,7 @@ contract ComprehensiveTests is Test {
         ));
         
         vm.prank(user1);
-        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
         
         assertEq(kaisign.getSpecBlobHash(specId), blobHash);
     }
@@ -789,32 +789,32 @@ contract ComprehensiveTests is Test {
         
         // Test all user functions are paused
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        vm.expectRevert("Pausable: paused");
         kaisign.createIncentive{value: 1 ether}(
             target1, 1, 1 ether, 7 days, "Test"
         );
         
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        vm.expectRevert("Pausable: paused");
         kaisign.commitSpec(keccak256("test"), target1, 1);
         
         bytes32 fakeCommitmentId = keccak256("fake");
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
-        kaisign.revealSpec{value: MIN_BOND}(fakeCommitmentId, keccak256("blob"), 123);
+        vm.expectRevert("Pausable: paused");
+        kaisign.revealSpec{value: MIN_BOND}(fakeCommitmentId, keccak256("blob"), keccak256("blob"), 123);
         
         bytes32 fakeSpecId = keccak256("spec");
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        vm.expectRevert("Pausable: paused");
         kaisign.proposeSpec{value: MIN_BOND}(fakeSpecId);
         
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        vm.expectRevert("Pausable: paused");
         kaisign.handleResult(fakeSpecId);
         
         bytes32 fakeIncentiveId = keccak256("incentive");
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        vm.expectRevert("Pausable: paused");
         kaisign.clawbackIncentive(fakeIncentiveId);
         
         // Unpause
@@ -877,7 +877,7 @@ contract ComprehensiveTests is Test {
             ));
             
             vm.prank(user);
-            kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+            kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
             
             vm.warp(block.timestamp + 1);
         }
@@ -901,7 +901,7 @@ contract ComprehensiveTests is Test {
             ));
             
             vm.prank(user1);
-            kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+            kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
             
             vm.warp(block.timestamp + 1);
         }

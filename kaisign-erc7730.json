@@ -1,0 +1,377 @@
+{
+  "$schema": "https://github.com/ethereum/ercs/blob/master/ERCS/erc-7730.json",
+  "context": {
+    "contract": {
+      "abi": "src/KaiSign.sol:KaiSign",
+      "deployments": [
+        {
+          "chainId": 11155111,
+          "address": "0x0000000000000000000000000000000000000000"
+        }
+      ]
+    },
+    "metadata": {
+      "name": "KaiSign",
+      "description": "Decentralized specification registry for smart contract interactions using EIP-4844 blobs",
+      "icon": "https://example.com/kaisign-icon.png",
+      "website": "https://kaisign.xyz"
+    }
+  },
+  "messages": {
+    "commitSpec": {
+      "label": "Commit Specification",
+      "description": "Commit to submitting a specification for a smart contract",
+      "fields": [
+        {
+          "label": "Commitment Hash",
+          "path": "commitment",
+          "type": "bytes32",
+          "description": "Hash of blob hash and nonce"
+        },
+        {
+          "label": "Target Contract",
+          "path": "targetContract",
+          "type": "address",
+          "description": "Contract this specification is for"
+        },
+        {
+          "label": "Chain ID",
+          "path": "chainId",
+          "type": "uint256",
+          "description": "Chain where target contract is deployed"
+        }
+      ]
+    },
+    "revealSpec": {
+      "label": "Reveal Specification",
+      "description": "Reveal and submit a previously committed specification with bond",
+      "fields": [
+        {
+          "label": "Commitment ID",
+          "path": "commitmentId",
+          "type": "bytes32",
+          "description": "ID of the commitment to reveal"
+        },
+        {
+          "label": "Blob Hash",
+          "path": "blobHash",
+          "type": "bytes32",
+          "description": "EIP-4844 blob hash containing the specification"
+        },
+        {
+          "label": "Nonce",
+          "path": "nonce",
+          "type": "uint256",
+          "description": "Random nonce used in commitment"
+        },
+        {
+          "label": "Bond Amount",
+          "path": "$value",
+          "type": "wei",
+          "description": "ETH bond for proposing specification (min 0.01 ETH)"
+        }
+      ]
+    },
+    "proposeSpec": {
+      "label": "Propose Specification",
+      "description": "Propose an existing specification for Reality.eth validation",
+      "fields": [
+        {
+          "label": "Spec ID",
+          "path": "specId",
+          "type": "bytes32",
+          "description": "ID of the specification to propose"
+        },
+        {
+          "label": "Additional Bond",
+          "path": "$value",
+          "type": "wei",
+          "description": "Additional ETH bond for proposal"
+        }
+      ]
+    },
+    "challengeSpec": {
+      "label": "Challenge Specification",
+      "description": "Challenge a proposed specification through Reality.eth",
+      "fields": [
+        {
+          "label": "Spec ID",
+          "path": "specId",
+          "type": "bytes32",
+          "description": "ID of the specification to challenge"
+        },
+        {
+          "label": "Question ID",
+          "path": "questionId",
+          "type": "bytes32",
+          "description": "Reality.eth question ID for the challenge"
+        }
+      ]
+    },
+    "claimIncentive": {
+      "label": "Claim Incentive",
+      "description": "Claim incentive rewards for a verified specification",
+      "fields": [
+        {
+          "label": "Spec ID",
+          "path": "specId",
+          "type": "bytes32",
+          "description": "ID of the verified specification"
+        }
+      ]
+    },
+    "withdrawBond": {
+      "label": "Withdraw Bond",
+      "description": "Withdraw bond from a finalized specification",
+      "fields": [
+        {
+          "label": "Spec ID",
+          "path": "specId",
+          "type": "bytes32",
+          "description": "ID of the specification"
+        }
+      ]
+    },
+    "addContractSpec": {
+      "label": "Add Contract Specification",
+      "description": "Admin function to directly add a verified specification",
+      "fields": [
+        {
+          "label": "Target Contract",
+          "path": "targetContract",
+          "type": "address",
+          "description": "Contract to add specification for"
+        },
+        {
+          "label": "Chain ID",
+          "path": "chainId",
+          "type": "uint256",
+          "description": "Chain ID of the contract"
+        },
+        {
+          "label": "Blob Hash",
+          "path": "blobHash",
+          "type": "bytes32",
+          "description": "Blob hash of the specification"
+        }
+      ],
+      "required": ["ADMIN_ROLE"]
+    },
+    "removeContractSpec": {
+      "label": "Remove Contract Specification",
+      "description": "Admin function to remove a specification",
+      "fields": [
+        {
+          "label": "Target Contract",
+          "path": "targetContract",
+          "type": "address",
+          "description": "Contract to remove specification from"
+        },
+        {
+          "label": "Chain ID",
+          "path": "chainId",
+          "type": "uint256",
+          "description": "Chain ID of the contract"
+        },
+        {
+          "label": "Blob Hash",
+          "path": "blobHash",
+          "type": "bytes32",
+          "description": "Blob hash to remove"
+        }
+      ],
+      "required": ["ADMIN_ROLE"]
+    },
+    "createIncentive": {
+      "label": "Create Incentive",
+      "description": "Create an incentive for specifications on a contract",
+      "fields": [
+        {
+          "label": "Target Contract",
+          "path": "targetContract",
+          "type": "address",
+          "description": "Contract to incentivize specifications for"
+        },
+        {
+          "label": "Chain ID",
+          "path": "chainId",
+          "type": "uint256",
+          "description": "Chain ID of the contract"
+        },
+        {
+          "label": "Reward Amount",
+          "path": "$value",
+          "type": "wei",
+          "description": "ETH reward for approved specifications"
+        }
+      ]
+    },
+    "updateMinBond": {
+      "label": "Update Minimum Bond",
+      "description": "Admin function to update minimum bond requirement",
+      "fields": [
+        {
+          "label": "New Min Bond",
+          "path": "newMinBond",
+          "type": "uint256",
+          "description": "New minimum bond amount in wei"
+        }
+      ],
+      "required": ["ADMIN_ROLE"]
+    },
+    "updateTreasury": {
+      "label": "Update Treasury",
+      "description": "Admin function to update treasury address",
+      "fields": [
+        {
+          "label": "New Treasury",
+          "path": "newTreasury",
+          "type": "address",
+          "description": "New treasury address"
+        }
+      ],
+      "required": ["ADMIN_ROLE"]
+    },
+    "addAdmin": {
+      "label": "Add Admin",
+      "description": "Add a new admin to the contract",
+      "fields": [
+        {
+          "label": "New Admin",
+          "path": "newAdmin",
+          "type": "address",
+          "description": "Address to grant admin privileges"
+        }
+      ],
+      "required": ["ADMIN_ROLE"]
+    },
+    "removeAdmin": {
+      "label": "Remove Admin",
+      "description": "Remove admin privileges from an address",
+      "fields": [
+        {
+          "label": "Admin to Remove",
+          "path": "admin",
+          "type": "address",
+          "description": "Address to revoke admin privileges from"
+        }
+      ],
+      "required": ["ADMIN_ROLE"]
+    }
+  },
+  "views": {
+    "specs": {
+      "label": "Specification Details",
+      "description": "View details of a specification",
+      "fields": [
+        {
+          "label": "Creator",
+          "path": "creator",
+          "type": "address"
+        },
+        {
+          "label": "Target Contract",
+          "path": "targetContract",
+          "type": "address"
+        },
+        {
+          "label": "Chain ID",
+          "path": "chainId",
+          "type": "uint256"
+        },
+        {
+          "label": "Blob Hash",
+          "path": "blobHash",
+          "type": "bytes32"
+        },
+        {
+          "label": "Status",
+          "path": "status",
+          "type": "enum",
+          "enum": ["Submitted", "Proposed", "Verified", "Rejected"]
+        },
+        {
+          "label": "Bond Amount",
+          "path": "bond",
+          "type": "wei"
+        },
+        {
+          "label": "Timestamp",
+          "path": "timestamp",
+          "type": "timestamp"
+        }
+      ]
+    },
+    "commitments": {
+      "label": "Commitment Details",
+      "description": "View commitment information",
+      "fields": [
+        {
+          "label": "Commitment Hash",
+          "path": "commitment",
+          "type": "bytes32"
+        },
+        {
+          "label": "Timestamp",
+          "path": "timestamp",
+          "type": "timestamp"
+        }
+      ]
+    },
+    "contractSpecs": {
+      "label": "Contract Specifications",
+      "description": "List of blob hashes for a contract",
+      "fields": [
+        {
+          "label": "Blob Hashes",
+          "path": "blobHashes",
+          "type": "bytes32[]"
+        }
+      ]
+    },
+    "incentives": {
+      "label": "Incentive Details",
+      "description": "View incentive information for a contract",
+      "fields": [
+        {
+          "label": "Sponsor",
+          "path": "sponsor",
+          "type": "address"
+        },
+        {
+          "label": "Total Reward",
+          "path": "totalReward",
+          "type": "wei"
+        },
+        {
+          "label": "Remaining Reward",
+          "path": "remainingReward",
+          "type": "wei"
+        },
+        {
+          "label": "Reward Per Spec",
+          "path": "rewardPerSpec",
+          "type": "wei"
+        }
+      ]
+    }
+  },
+  "warnings": {
+    "revealSpec": [
+      {
+        "condition": "$value < 10000000000000000",
+        "message": "Bond amount is below minimum (0.01 ETH)"
+      }
+    ],
+    "commitSpec": [
+      {
+        "message": "Remember to save your nonce - you'll need it to reveal!"
+      }
+    ],
+    "challengeSpec": [
+      {
+        "message": "Challenging requires creating a Reality.eth question with bond"
+      }
+    ]
+  }
+}
