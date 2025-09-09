@@ -789,32 +789,32 @@ contract ComprehensiveTests is Test {
         
         // Test all user functions are paused
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Pausable.EnforcedPause.selector));
+        vm.expectRevert("Pausable: paused");
         kaisign.createIncentive{value: 1 ether}(
             target1, 1, 1 ether, 7 days, "Test"
         );
         
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Pausable.EnforcedPause.selector));
+        vm.expectRevert("Pausable: paused");
         kaisign.commitSpec(keccak256("test"), target1, 1);
         
         bytes32 fakeCommitmentId = keccak256("fake");
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Pausable.EnforcedPause.selector));
+        vm.expectRevert("Pausable: paused");
         kaisign.revealSpec{value: MIN_BOND}(fakeCommitmentId, keccak256("blob"), keccak256("blob"), 123);
         
         bytes32 fakeSpecId = keccak256("spec");
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Pausable.EnforcedPause.selector));
+        vm.expectRevert("Pausable: paused");
         kaisign.proposeSpec{value: MIN_BOND}(fakeSpecId);
         
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Pausable.EnforcedPause.selector));
+        vm.expectRevert("Pausable: paused");
         kaisign.handleResult(fakeSpecId);
         
         bytes32 fakeIncentiveId = keccak256("incentive");
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Pausable.EnforcedPause.selector));
+        vm.expectRevert("Pausable: paused");
         kaisign.clawbackIncentive(fakeIncentiveId);
         
         // Unpause
