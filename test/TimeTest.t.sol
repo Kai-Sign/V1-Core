@@ -103,7 +103,7 @@ contract TimeTest is Test {
         
         // Create incentive with 7 day deadline
         vm.prank(user);
-        bytes32 incentiveId = kaisign.createIncentive{value: 1 ether}(
+        kaisign.createIncentive{value: 1 ether}(
             target, 1, 1 ether, 7 days, "Test incentive"
         );
         
@@ -194,14 +194,14 @@ contract TimeTest is Test {
         
         // Create two incentives at different times
         vm.prank(user);
-        bytes32 incentiveId1 = kaisign.createIncentive{value: 0.5 ether}(
+        kaisign.createIncentive{value: 0.5 ether}(
             target1, 1, 0.5 ether, 7 days, "First incentive"
         );
         
         vm.warp(block.timestamp + 1 days);
         
         vm.prank(user);
-        bytes32 incentiveId2 = kaisign.createIncentive{value: 0.5 ether}(
+        kaisign.createIncentive{value: 0.5 ether}(
             target2, 1, 0.5 ether, 7 days, "Second incentive"
         );
         

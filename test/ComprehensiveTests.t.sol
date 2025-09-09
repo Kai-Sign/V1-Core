@@ -54,7 +54,7 @@ contract ComprehensiveTests is Test {
     //                           CONSTRUCTOR TESTS
     // =============================================================================
     
-    function testConstructorInitialization() public {
+    function testConstructorInitialization() public view {
         assertEq(kaisign.realityETH(), address(realityETH));
         assertEq(kaisign.arbitrator(), arbitrator);
         assertEq(kaisign.treasury(), treasury);
@@ -339,7 +339,7 @@ contract ComprehensiveTests is Test {
         bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, blobHash, nonce);
         
         // Check spec was created
-        (uint64 createdTimestamp, uint64 proposedTimestamp, KaiSign.Status status, uint80 totalBonds,, address creator, address targetContract, bytes32 specBlobHash, bytes32 questionId, bytes32 specIncentiveId, uint256 chainId) = kaisign.specs(specId);
+        (uint64 createdTimestamp, uint64 proposedTimestamp, KaiSign.Status status, uint80 totalBonds,, address creator, address targetContract, bytes32 specBlobHash, bytes32 questionId,, uint256 chainId) = kaisign.specs(specId);
         
         assertEq(createdTimestamp, block.timestamp);
         assertEq(proposedTimestamp, block.timestamp); // Auto-proposed

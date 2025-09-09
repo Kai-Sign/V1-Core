@@ -135,7 +135,7 @@ contract AuditTests is Test {
         bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, metadataHash, nonce);
         
         // Get questionId and mock acceptance
-        (,,,,,address creator, address targetContract, bytes32 blobHashFromSpec, bytes32 questionId, bytes32 specIncentiveId, uint256 specChainId) = kaisign.specs(specId);
+        (,,,,,,,,bytes32 questionId,,) = kaisign.specs(specId);
         // Mock Reality.eth finalization and acceptance
         vm.mockCall(
             address(realityETH),
@@ -280,7 +280,7 @@ contract AuditTests is Test {
     function testPlatformFeeManipulation() public {
         // Create and claim incentive to verify platform fee is taken
         vm.prank(user1);
-        bytes32 incentiveId = kaisign.createIncentive{value: 1 ether}(
+        kaisign.createIncentive{value: 1 ether}(
             target, 1, 1 ether, 7 days, "fee test"
         );
         
@@ -306,7 +306,7 @@ contract AuditTests is Test {
         bytes32 specId = kaisign.revealSpec{value: MIN_BOND}(commitmentId, blobHash, metadataHash, nonce);
         
         // Get the actual questionId from the spec  
-        (,,,,,address creator, address targetContract, bytes32 blobHashFromSpec, bytes32 questionId, bytes32 specIncentiveId, uint256 specChainId) = kaisign.specs(specId);
+        (,,,,,,,,bytes32 questionId,,) = kaisign.specs(specId);
         // Mock Reality.eth finalization and acceptance
         vm.mockCall(
             address(realityETH),
@@ -520,7 +520,7 @@ contract AuditTests is Test {
     function testFullWorkflowWithIncentive() public {
         // Create incentive
         vm.prank(user1);
-        bytes32 incentiveId = kaisign.createIncentive{value: 1 ether}(
+        kaisign.createIncentive{value: 1 ether}(
             target, 1, 1 ether, 7 days, "integration test"
         );
         
@@ -550,7 +550,7 @@ contract AuditTests is Test {
         assertEq(uint256(status), uint256(KaiSign.Status.Proposed));
         
         // Get the actual questionId from the spec and mock result
-        (,,,,,address creator, address targetContract, bytes32 blobHashFromSpec, bytes32 questionId, bytes32 specIncentiveId, uint256 specChainId) = kaisign.specs(specId);
+        (,,,,,,,,bytes32 questionId,,) = kaisign.specs(specId);
         // Mock Reality.eth finalization and acceptance
         vm.mockCall(
             address(realityETH),

@@ -319,7 +319,7 @@ contract PracticalWorkflowTest is Test {
         
         // Create incentive
         vm.startPrank(incentiveCreator);
-        bytes32 incentiveId = kaisign.createIncentive{value: INCENTIVE_AMOUNT}(
+        kaisign.createIncentive{value: INCENTIVE_AMOUNT}(
             testTarget,
             targetChainId,
             INCENTIVE_AMOUNT,
