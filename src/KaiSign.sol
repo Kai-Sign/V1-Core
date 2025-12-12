@@ -1,11 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {RealityETH_v3_0} from "../staticlib/RealityETH-3.0.sol";
+import {KAIArbitration} from "./KAIArbitration.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 
+/**
+ * @title KaiSign
+ * @notice Aggregated curator for trusted clear signing metadata registries
+ * @dev Uses KAI token-based arbitration with Schelling point voting for dispute resolution
+ *
+ * Changes from v1.0.0:
+ * - Removed Reality.eth dependency
+ * - Integrated KAIArbitration for native token-based voting
+ * - Replaced questionId with votingID
+ */
 contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
 
     // =============================================================================
@@ -32,53 +42,52 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
     //                                   ROLES
     // =============================================================================
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
-    
+
     // =============================================================================
     //                                CONSTANTS
     // =============================================================================
-    string public constant VERSION = "1.0.0";
+    string public constant VERSION = "2.0.0";
     uint256 public constant PLATFORM_FEE_PERCENT = 5; // 5%
     uint256 public constant COMMIT_REVEAL_TIMEOUT = 1 hours;
     uint256 public constant INCENTIVE_DURATION = 30 days;
     uint256 public constant INCENTIVE_CLAWBACK_PERIOD = 90 days; // 3 months
-    uint32 public constant DEFAULT_TIMEOUT = 48 hours; // 48 hours for Reality.eth questions
+    uint32 public constant DEFAULT_VOTING_PERIOD = 48 hours; // Default voting period for KAI arbitration
+    uint16 public constant DEFAULT_REWARD_RATE_BPS = 55; // ~0.055% per cycle → ~10% APR
 
     // =============================================================================
     //                              STATE VARIABLES
     // =============================================================================
-    address public immutable realityETH;
-    address public immutable arbitrator;
+    KAIArbitration public immutable kaiArbitration;
     address public immutable treasury;
     uint256 public minBond;
-    uint256 public templateId;
-    
+
     // Blob hash storage only
     mapping(bytes32 => bytes32) public specBlobHash;
-    
+
     // Commit-reveal mechanism
     mapping(bytes32 => CommitData) public commitments;
-    
+
     // Contract address integration with chain support
     mapping(uint256 => mapping(address => bytes32[])) public contractSpecs;
     mapping(uint256 => mapping(address => uint256)) public contractSpecCount;
-    
+
     // Incentive system
     mapping(bytes32 => IncentiveData) public incentives;
     mapping(address => bytes32[]) public userIncentives;
     mapping(uint256 => mapping(address => uint256)) public incentivePool;
     mapping(uint256 => mapping(address => uint256)) public poolContributorCount;
-    
+
     // Spec management
     mapping(bytes32 => ERC7730Spec) public specs;
     mapping(bytes32 => mapping(address => uint256)) public userBonds;
-    
+
     // =============================================================================
     //                                   ENUMS
     // =============================================================================
     enum Status {
         Committed,    // Commitment submitted, waiting for reveal
         Submitted,    // Revealed and submitted, waiting for proposal
-        Proposed,     // Question created on Reality.eth
+        Proposed,     // Voting initiated on KAI Arbitration
         Finalized,    // Final result determined
         Cancelled     // Cancelled/invalid
     }
@@ -86,25 +95,25 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
     // =============================================================================
     //                                 STRUCTS
     // =============================================================================
-    
+
     // Optimized struct packing for gas efficiency
     struct ERC7730Spec {
         uint64 createdTimestamp;    // 8 bytes
-        uint64 proposedTimestamp;   // 8 bytes  
+        uint64 proposedTimestamp;   // 8 bytes
         Status status;              // 1 byte
         uint80 totalBonds;          // 10 bytes (up to ~1.2M ETH)
         uint32 reserved;            // 4 bytes - reserved for future use
         // SLOT 1: 32 bytes total (perfectly packed!)
-        
-        address creator;            // 20 bytes  
+
+        address creator;            // 20 bytes
         address targetContract;     // 20 bytes - contract this spec validates
         // SLOT 2: 40 bytes - needs 2 slots but efficiently packed
-        
+
         bytes32 blobHash;          // 32 bytes - EIP-4844 blob hash for ERC7730 JSON
-        bytes32 questionId;        // 32 bytes - full slot
+        bytes32 votingID;          // 32 bytes - KAI Arbitration voting ID (was questionId)
         bytes32 incentiveId;       // 32 bytes - linked incentive if any
         uint256 chainId;           // 32 bytes - target chain ID
-        // SLOTS 3+: Only when spec has blobHash/questionId/incentiveId/chainId
+        // SLOTS 3+: Only when spec has blobHash/votingID/incentiveId/chainId
     }
 
     struct CommitData {
@@ -112,13 +121,13 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         uint64 commitTimestamp;     // 8 bytes
         uint32 reserved1;           // 4 bytes - reserved for future use
         // SLOT 1: 32 bytes total (perfectly packed!)
-        
+
         address targetContract;     // 20 bytes
         bool isRevealed;            // 1 byte
         uint80 bondAmount;          // 10 bytes (up to 1.2M ETH)
         uint8 reserved;             // 1 byte - for alignment
         // SLOT 2: 32 bytes total (perfectly packed!)
-        
+
         uint64 revealDeadline;      // 8 bytes (safe until year 2554)
         uint256 chainId;            // 32 bytes - target chain ID
         bytes32 incentiveId;        // 32 bytes - if incentivized
@@ -130,17 +139,17 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         uint80 amount;              // 10 bytes (up to ~1.2M ETH)
         uint16 reserved1;           // 2 bytes - reserved for future use
         // SLOT 1: 32 bytes total (perfectly packed!)
-        
+
         uint64 deadline;            // 8 bytes
         uint64 createdAt;           // 8 bytes
         address targetContract;     // 20 bytes - truncated to 16 bytes
         // SLOT 2: 36 bytes - needs 2 slots
-        
+
         bool isClaimed;             // 1 byte
         bool isActive;              // 1 byte
         uint256 chainId;            // 32 bytes - target chain ID
         // SLOT 3: Chain ID and flags
-        
+
         string description;         // Dynamic - separate slots when needed
         // SLOT 4+: Description when exists
     }
@@ -179,21 +188,14 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
     event LogProposeSpec(
         address indexed user,
         bytes32 indexed specID,
-        bytes32 questionId,
+        bytes32 votingID,
         uint256 bond
     );
-
-    // The following events related to spec assertion have been removed.
-    // Originally, KaiSign allowed anyone to top up a spec’s bond and vote on the outcome
-    // through `assertSpecValid` and `assertSpecInvalid`. Those functions (and their
-    // associated events) have been removed to simplify the contract and rely solely on
-    // Reality.eth’s native bond mechanism.
 
     event LogHandleResult(
         bytes32 indexed specID,
         bool isAccepted
     );
-
 
     event LogIncentiveCreated(
         bytes32 indexed incentiveId,
@@ -240,20 +242,24 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
     // =============================================================================
     //                               CONSTRUCTOR
     // =============================================================================
+    /**
+     * @notice Deploys the KaiSign contract with KAI token arbitration
+     * @param _kaiArbitration Address of the KAI Arbitration contract
+     * @param _treasury Address to receive platform fees
+     * @param _minBond Minimum ETH bond required for spec submission
+     * @param _initialAdmins Array of initial admin addresses
+     */
     constructor(
-        address _realityETH,
-        address _arbitrator,
+        address _kaiArbitration,
         address _treasury,
         uint256 _minBond,
         address[] memory _initialAdmins
     ) {
-        if (_realityETH == address(0)) revert InvalidContract();
-        if (_arbitrator == address(0)) revert InvalidContract();
+        if (_kaiArbitration == address(0)) revert InvalidContract();
         if (_treasury == address(0)) revert InvalidContract();
         if (_initialAdmins.length == 0) revert Unauthorized();
 
-        realityETH = _realityETH;
-        arbitrator = _arbitrator;
+        kaiArbitration = KAIArbitration(_kaiArbitration);
         treasury = _treasury;
         minBond = _minBond;
 
@@ -262,17 +268,12 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         for (uint256 i = 0; i < _initialAdmins.length; i++) {
             _grantRole(ADMIN_ROLE, _initialAdmins[i]);
         }
-
-        // Create Reality.eth template
-        templateId = RealityETH_v3_0(realityETH).createTemplate(
-            '{"title": "Is the ERC7730 specification %s for contract %s on chain %s correct?", "type": "bool", "category": "misc"}'
-        );
     }
 
     // =============================================================================
     //                              ADMIN FUNCTIONS
     // =============================================================================
-    
+
     function setMinBond(uint256 _minBond) external onlyAdmin {
         minBond = _minBond;
     }
@@ -300,7 +301,7 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
     // =============================================================================
     //                           INCENTIVE SYSTEM
     // =============================================================================
-    
+
     function createIncentive(
         address targetContract,
         uint256 targetChainId,
@@ -312,7 +313,7 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         if (targetChainId == 0) revert InvalidContract();
         if (amount > type(uint80).max) revert InsufficientIncentive(); // Prevent overflow
         if (duration == 0 || duration > 30 days) revert IncentiveExpired();
-        
+
         // ETH incentive only
         if (msg.value < amount) revert InsufficientIncentive();
         // Refund excess ETH
@@ -320,7 +321,7 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
             (bool success, ) = payable(msg.sender).call{value: msg.value - amount}("");
             require(success, "Excess ETH refund failed");
         }
-        
+
         incentiveId = keccak256(abi.encodePacked(
             msg.sender,
             targetContract,
@@ -361,7 +362,7 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
     // =============================================================================
     //                           COMMIT-REVEAL PATTERN
     // =============================================================================
-    
+
     function commitSpec(
         bytes32 commitment,
         address targetContract,
@@ -415,8 +416,8 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
     ) external payable nonReentrant whenNotPaused returns (bytes32 specID) {
         return _revealSpecInternal(commitmentId, blobHash, metadataHash, nonce);
     }
-    
-    
+
+
     function _revealSpecInternal(
         bytes32 commitmentId,
         bytes32 blobHash,
@@ -424,7 +425,7 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         uint256 nonce
     ) internal returns (bytes32 specID) {
         CommitData storage commitment = commitments[commitmentId];
-        
+
         if (commitment.committer == address(0)) revert CommitmentNotFound();
         if (commitment.committer != msg.sender) revert InvalidReveal();
         if (commitment.isRevealed) revert CommitmentAlreadyRevealed();
@@ -432,7 +433,7 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         if (block.timestamp > commitment.revealDeadline) revert CommitmentExpired();
         // Blob hash is mandatory for EIP-4844 blob reference
         if (blobHash == bytes32(0)) revert InvalidReveal();
-        
+
         // Collect the bond at reveal time. Require it meets the minimum bond.
         // No platform fee is deducted - the full amount goes to the spec.
         if (msg.value < minBond) revert InsufficientBond();
@@ -478,11 +479,11 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
             creator: msg.sender,
             targetContract: commitment.targetContract,
             blobHash: blobHash,
-            questionId: bytes32(0),
+            votingID: bytes32(0),
             incentiveId: bytes32(0),
             chainId: commitment.chainId
         });
-        
+
         // Store the blob hash
         specBlobHash[specID] = blobHash;
 
@@ -529,7 +530,7 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
     // =============================================================================
     //                              SPEC MANAGEMENT
     // =============================================================================
-    
+
     function proposeSpec(bytes32 specID) external payable nonReentrant whenNotPaused {
         _proposeSpec(specID, false);
     }
@@ -541,7 +542,7 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
 
         uint256 additionalBond;
         uint256 totalBond;
-        
+
         if (isInternalCall) {
             // Called from revealSpec - no additional bond, use existing totalBonds
             additionalBond = 0;
@@ -551,7 +552,7 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
             additionalBond = msg.value;
             totalBond = spec.totalBonds + additionalBond;
         }
-        
+
         if (totalBond < minBond) revert InsufficientBond();
         if (totalBond > type(uint80).max) revert InsufficientBond(); // Prevent overflow
 
@@ -564,28 +565,16 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
             userBonds[specID][msg.sender] += additionalBond;
         }
 
-        // INTERACTIONS: create Reality.eth question using the total bond
-        string memory delim = unicode"␟";
-        string memory questionParams = string(abi.encodePacked(
-            _bytes32ToString(spec.blobHash),
-            delim,
-            _addressToString(spec.targetContract),
-            delim,
-            _uint256ToString(spec.chainId)
-        ));
-
-        spec.questionId = RealityETH_v3_0(realityETH).askQuestionWithMinBond{value: totalBond}(
-            templateId,
-            questionParams,
-            arbitrator,
-            DEFAULT_TIMEOUT,
-            0,
-            0,
-            minBond
+        // INTERACTIONS: Initiate KAI voting instead of Reality.eth question
+        bytes32 votingID = kaiArbitration.initiateVoting(
+            specID,
+            DEFAULT_VOTING_PERIOD,
+            DEFAULT_REWARD_RATE_BPS
         );
 
-        emit LogProposeSpec(msg.sender, specID, spec.questionId, totalBond);
+        spec.votingID = votingID;
 
+        emit LogProposeSpec(msg.sender, specID, votingID, totalBond);
     }
 
 
@@ -593,11 +582,11 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         ERC7730Spec storage spec = specs[specID];
         if (spec.status != Status.Proposed) revert NotProposed();
 
-        // Check if Reality.eth question is finalized
-        if (!RealityETH_v3_0(realityETH).isFinalized(spec.questionId)) revert NotFinalized();
+        // Check if KAI voting is finalized and get result
+        (bool finalized, bool result) = kaiArbitration.getVotingResult(spec.votingID);
+        if (!finalized) revert NotFinalized();
 
-        bytes32 result = RealityETH_v3_0(realityETH).resultFor(spec.questionId);
-        bool specAccepted = uint256(result) == 1;
+        bool specAccepted = result;
 
         spec.status = Status.Finalized;
         emit LogHandleResult(specID, specAccepted);
@@ -605,7 +594,7 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         if (specAccepted) {
             // Blob hash is stored in the contract
             // Metadata is in the blob sidecar referenced by blobHash
-            
+
             // Claim from the incentive pool for this contract/chain
             uint256 poolAmount = incentivePool[spec.chainId][spec.targetContract];
             if (poolAmount > 0) {
@@ -653,17 +642,17 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
     // Allow incentive creators to reclaim funds after 3 months if unclaimed
     function clawbackIncentive(bytes32 incentiveId) external nonReentrant whenNotPaused {
         IncentiveData storage incentive = incentives[incentiveId];
-        
+
         if (incentive.creator != msg.sender) revert Unauthorized();
         if (incentive.isClaimed || !incentive.isActive) revert NoIncentiveToClaim();
         if (block.timestamp < incentive.createdAt + INCENTIVE_CLAWBACK_PERIOD) revert ClawbackTooEarly();
-        
+
         // Mark as inactive and claimed to prevent double-spending
         incentive.isClaimed = true;
         incentive.isActive = false;
-        
+
         uint256 clawbackAmount = incentive.amount;
-        
+
         // ETH clawback only - no platform fee on clawback
         (bool success, ) = payable(msg.sender).call{value: clawbackAmount}("");
         require(success, "Clawback transfer failed");
@@ -671,7 +660,7 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
         // Reduce pool amount by clawback amount
         incentivePool[incentive.chainId][incentive.targetContract] -= clawbackAmount;
         poolContributorCount[incentive.chainId][incentive.targetContract]--;
-        
+
         emit LogIncentiveClawback(incentiveId, msg.sender, clawbackAmount);
     }
 
@@ -683,7 +672,7 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
     // =============================================================================
     //                              QUERY FUNCTIONS
     // =============================================================================
-    
+
     function getSpecsByContract(address targetContract, uint256 chainId) external view returns (bytes32[] memory) {
         return contractSpecs[chainId][targetContract];
     }
@@ -696,16 +685,16 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
     ) external view returns (bytes32[] memory specIds, uint256 total) {
         bytes32[] storage allSpecs = contractSpecs[chainId][targetContract];
         total = allSpecs.length;
-        
+
         if (offset >= total) {
             return (new bytes32[](0), total);
         }
-        
+
         uint256 end = offset + limit;
         if (end > total) {
             end = total;
         }
-        
+
         specIds = new bytes32[](end - offset);
         for (uint256 i = offset; i < end; i++) {
             specIds[i - offset] = allSpecs[i];
@@ -723,59 +712,44 @@ contract KaiSign is ReentrancyGuard, AccessControl, Pausable {
     function getIncentivePool(address targetContract, uint256 chainId) external view returns (uint256 poolAmount, uint256 contributorCount) {
         return (incentivePool[chainId][targetContract], poolContributorCount[chainId][targetContract]);
     }
-    
-    
+
+
     function getSpecBlobHash(bytes32 specID) external view returns (bytes32) {
         return specBlobHash[specID];
     }
-    
 
-    // =============================================================================
-    //                              UTILITY FUNCTIONS
-    // =============================================================================
-    
-    function _addressToString(address addr) internal pure returns (string memory) {
-        bytes memory data = abi.encodePacked(addr);
-        bytes memory alphabet = "0123456789abcdef";
-        bytes memory str = new bytes(2 + data.length * 2);
-        str[0] = "0";
-        str[1] = "x";
-        for (uint256 i = 0; i < data.length; i++) {
-            str[2+i*2] = alphabet[uint8(data[i] >> 4)];
-            str[3+i*2] = alphabet[uint8(data[i] & 0x0f)];
+    /**
+     * @notice Get the voting status for a spec from KAI Arbitration
+     * @param specID The spec ID
+     * @return finalized Whether voting is finalized
+     * @return result The result (true = accepted)
+     * @return totalStakeFor Total stake voting for validity
+     * @return totalStakeAgainst Total stake voting against validity
+     * @return endTime Voting end timestamp
+     */
+    function getVotingStatus(bytes32 specID) external view returns (
+        bool finalized,
+        bool result,
+        uint256 totalStakeFor,
+        uint256 totalStakeAgainst,
+        uint256 endTime
+    ) {
+        ERC7730Spec storage spec = specs[specID];
+        if (spec.votingID == bytes32(0)) {
+            return (false, false, 0, 0, 0);
         }
-        return string(str);
+
+        (finalized, result, totalStakeFor, totalStakeAgainst, endTime, , ) =
+            kaiArbitration.getVotingDetails(spec.votingID);
     }
 
-    function _uint256ToString(uint256 value) internal pure returns (string memory) {
-        if (value == 0) {
-            return "0";
-        }
-        uint256 temp = value;
-        uint256 digits;
-        while (temp != 0) {
-            digits++;
-            temp /= 10;
-        }
-        bytes memory buffer = new bytes(digits);
-        while (value != 0) {
-            digits -= 1;
-            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
-            value /= 10;
-        }
-        return string(buffer);
-    }
-    
-    function _bytes32ToString(bytes32 value) internal pure returns (string memory) {
-        bytes memory alphabet = "0123456789abcdef";
-        bytes memory str = new bytes(66); // "0x" + 64 characters
-        str[0] = "0";
-        str[1] = "x";
-        for (uint256 i = 0; i < 32; i++) {
-            str[2 + i * 2] = alphabet[uint8(value[i] >> 4)];
-            str[3 + i * 2] = alphabet[uint8(value[i] & 0x0f)];
-        }
-        return string(str);
+    /**
+     * @notice Get the KAI Arbitration voting ID for a spec
+     * @param specID The spec ID
+     * @return votingID The voting ID from KAI Arbitration
+     */
+    function getSpecVotingID(bytes32 specID) external view returns (bytes32) {
+        return specs[specID].votingID;
     }
 
 }
