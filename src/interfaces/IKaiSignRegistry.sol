@@ -72,7 +72,7 @@ interface IKaiSignRegistry {
     ) external;
 
     // ========== REVOCATION ==========
-    function proposeRevoke(bytes32 uid) external;
+    function proposeRevoke(bytes32 uid) external payable;
     function finalizeRevoke(bytes32 uid) external;
 
     // ========== MERKLE HELPERS ==========
