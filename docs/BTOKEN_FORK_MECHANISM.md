@@ -89,9 +89,34 @@ registry.setBondToken(
 | Reality.eth ETH queried | Reality.eth ERC20 queried |
 
 **What happens to pending ETH specs:**
-- They CANNOT be finalized (wrong Reality.eth instance)
-- They are effectively orphaned
+- They CANNOT be finalized on the registry (wrong Reality.eth instance queried)
+- They are effectively orphaned on the registry side
 - Users must re-submit in bToken mode
+
+**What "orphaned" means (and does NOT mean):**
+
+When `revealSpec{value}()` is called, ETH is sent directly to the **Reality.eth contract**
+(not to KaiSignRegistry). After bToken activation, `finalize()` switches to querying
+`realityETH_ERC20` instead of `realityETH`:
+
+```solidity
+// finalize() picks Reality.eth instance based on current mode
+IRealityETH reality = address(bondToken) == address(0) ? realityETH : realityETH_ERC20;
+if (!reality.isFinalized(questionId)) revert ChallengePeriodActive();
+```
+
+This means the ETH-mode `questionId` is looked up on the wrong Reality.eth instance,
+so `isFinalized()` returns false and `finalize()` always reverts.
+
+| What IS orphaned | What is NOT affected |
+|------------------|----------------------|
+| Registry attestation stuck in pending forever | ETH bonds on Reality.eth still resolve normally |
+| Cannot be approved/indexed into merkle tree | Users can still answer questions on Reality.eth directly |
+| Cannot be revoked through the registry | Winners can claim bond payouts from Reality.eth |
+| `finalize()` reverts with `ChallengePeriodActive()` | No ETH is lost - Reality.eth is a standalone contract |
+
+**In short:** Users do not lose their ETH bonds. Reality.eth settles independently.
+Only the registry-side attestation state becomes permanently stuck.
 
 ### Usage After Activation
 
@@ -197,7 +222,8 @@ bool valid = IKaiSignRegistry(parentRegistry).verifyAttestationInclusion(uid, pr
 - [ ] Deploy bToken ERC20 contract
 - [ ] Deploy Reality.eth ERC20 instance with your bToken
 - [ ] Ensure sufficient bToken liquidity for participants
-- [ ] **Notify users: all pending ETH specs will be orphaned**
+- [ ] **Notify users: all pending ETH specs will be orphaned on the registry**
+- [ ] Remind users their ETH bonds on Reality.eth are safe and claimable directly
 - [ ] Set deadline for ETH spec finalization
 
 ### Activation
@@ -206,7 +232,8 @@ bool valid = IKaiSignRegistry(parentRegistry).verifyAttestationInclusion(uid, pr
 - [ ] Update frontend to use token approval flow
 
 ### After Activation (CLEAN BREAK)
-- [ ] **Old ETH-based attestations are ORPHANED** - cannot be finalized
+- [ ] **Old ETH-based attestations are ORPHANED on registry** - cannot be finalized
+- [ ] ETH bonds on Reality.eth still settle normally - users can claim directly
 - [ ] All pending ETH-mode specs must be re-submitted in bToken mode
 - [ ] New submissions must use `revealSpecToken()`
 - [ ] Update documentation and SDKs
