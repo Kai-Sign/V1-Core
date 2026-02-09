@@ -34,6 +34,8 @@ contract RealityEthForkTest is Test {
 
     uint256 constant MIN_BOND = 0.01 ether;
     uint32 constant DEFAULT_TIMEOUT = 48 hours;
+    bytes32 constant LEAF_TYPEHASH =
+        keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,uint256 idx,bool revoked)");
 
     // ========== STATE ==========
 
@@ -47,6 +49,7 @@ contract RealityEthForkTest is Test {
 
     // Test data
     bytes32 public testBlobHash;
+    bytes32 public testMetadataHash;
     bytes32 public testExtcodehash;
     uint256 public testChainId;
 
@@ -75,6 +78,7 @@ contract RealityEthForkTest is Test {
 
         // Set up test data
         testBlobHash = keccak256("test-blob-hash");
+        testMetadataHash = keccak256("test-metadata-content");
         testExtcodehash = keccak256("test-extcodehash");
         testChainId = 1; // Mainnet
 
@@ -112,6 +116,7 @@ contract RealityEthForkTest is Test {
     function _commitAndReveal(
         address _proposer,
         bytes32 _blobHash,
+        bytes32 _metadataHash,
         bytes32 _extcodehash,
         uint256 _chainId,
         uint256 _bond
@@ -155,7 +160,7 @@ contract RealityEthForkTest is Test {
         console.log("match:", reconstructedId == commitmentId);
 
         // Reveal with bond (same nonce)
-        uid = registry.revealSpec{value: _bond}(commitmentId, _blobHash, nonce);
+        uid = registry.revealSpec{value: _bond}(commitmentId, _blobHash, nonce, _metadataHash);
         vm.stopPrank();
 
         // Get questionId
@@ -219,6 +224,7 @@ contract RealityEthForkTest is Test {
         (bytes32 uid, bytes32 questionId) = _commitAndReveal(
             proposer,
             testBlobHash,
+            testMetadataHash,
             testExtcodehash,
             testChainId,
             MIN_BOND
@@ -242,6 +248,7 @@ contract RealityEthForkTest is Test {
         (bytes32 uid, bytes32 questionId) = _commitAndReveal(
             proposer,
             testBlobHash,
+            testMetadataHash,
             testExtcodehash,
             testChainId,
             MIN_BOND
@@ -284,6 +291,7 @@ contract RealityEthForkTest is Test {
         (bytes32 uid, bytes32 questionId) = _commitAndReveal(
             proposer,
             testBlobHash,
+            testMetadataHash,
             testExtcodehash,
             testChainId,
             MIN_BOND
@@ -306,10 +314,11 @@ contract RealityEthForkTest is Test {
         assertEq(uint256(result), 1, "Result should be APPROVE (1)");
 
         // Finalize on registry (need merkle proof - use empty for first attestation)
-        bytes32 leaf = keccak256(abi.encodePacked(
+        bytes32 leaf = keccak256(abi.encode(
+            LEAF_TYPEHASH,
             testChainId,
             testExtcodehash,
-            testBlobHash,
+            testMetadataHash,
             uint64(1),  // idx
             false       // not revoked
         ));
@@ -336,6 +345,7 @@ contract RealityEthForkTest is Test {
         (bytes32 uid, bytes32 questionId) = _commitAndReveal(
             proposer,
             testBlobHash,
+            testMetadataHash,
             testExtcodehash,
             testChainId,
             MIN_BOND
@@ -390,7 +400,7 @@ contract RealityEthForkTest is Test {
         // 2. Reveal with bond
         console.log("2. Revealing spec with", MIN_BOND, "ETH bond...");
         vm.prank(proposer);
-        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce);
+        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
         bytes32 questionId = registry.questionIds(uid);
         console.log("   UID:", vm.toString(uid));
         console.log("   Question ID:", vm.toString(questionId));
@@ -405,10 +415,11 @@ contract RealityEthForkTest is Test {
 
         // 5. Finalize
         console.log("5. Finalizing...");
-        bytes32 leaf = keccak256(abi.encodePacked(
+        bytes32 leaf = keccak256(abi.encode(
+            LEAF_TYPEHASH,
             testChainId,
             testExtcodehash,
-            testBlobHash,
+            testMetadataHash,
             uint64(1),
             false
         ));
@@ -435,6 +446,7 @@ contract RealityEthForkTest is Test {
         (bytes32 uid, bytes32 questionId) = _commitAndReveal(
             proposer,
             testBlobHash,
+            testMetadataHash,
             testExtcodehash,
             testChainId,
             MIN_BOND
@@ -444,10 +456,11 @@ contract RealityEthForkTest is Test {
         _submitAnswer(questionId, true, MIN_BOND);
         vm.warp(block.timestamp + DEFAULT_TIMEOUT + 1);
 
-        bytes32 leaf = keccak256(abi.encodePacked(
+        bytes32 leaf = keccak256(abi.encode(
+            LEAF_TYPEHASH,
             testChainId,
             testExtcodehash,
-            testBlobHash,
+            testMetadataHash,
             uint64(1),
             false
         ));
