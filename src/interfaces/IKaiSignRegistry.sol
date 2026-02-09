@@ -12,7 +12,8 @@ interface IKaiSignRegistry {
         bytes32 uid;                // Unique identifier
         uint256 chainId;            // Target chain ID
         bytes32 extcodehash;        // Target contract bytecode hash
-        bytes32 blobHash;           // EIP-4844 blob hash (metadata reference)
+        bytes32 blobHash;           // EIP-4844 blob hash (commit-reveal only)
+        bytes32 metadataHash;       // keccak256(canonical(metadata)) - provable content hash
         address attester;           // Who created this attestation
         uint64 timestamp;           // When it was created
         uint64 idx;                 // Global index for merkle ordering
@@ -61,7 +62,8 @@ interface IKaiSignRegistry {
     function revealSpec(
         bytes32 commitmentId,
         bytes32 blobHash,
-        uint256 nonce
+        uint256 nonce,
+        bytes32 metadataHash
     ) external payable returns (bytes32 uid);
 
     // ========== FINALIZATION ==========

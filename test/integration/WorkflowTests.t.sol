@@ -17,6 +17,8 @@ contract WorkflowTests is Test {
     address constant NO_ARBITRATOR = address(0);
     uint256 constant MIN_BOND = 0.01 ether;
     uint32 constant DEFAULT_TIMEOUT = 48 hours;
+    bytes32 constant LEAF_TYPEHASH =
+        keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,uint256 idx,bool revoked)");
 
     // ========== STATE ==========
     KaiSignRegistry public registry;
@@ -67,6 +69,7 @@ contract WorkflowTests is Test {
 
         // Test data
         bytes32 blobHash = keccak256("erc7730-metadata-json");
+        bytes32 metadataHash = keccak256("erc7730-metadata-content");
         bytes32 extcodehash = keccak256("uniswap-v3-router-bytecode");
         uint256 chainId = 1;
         uint256 nonce = block.timestamp;
@@ -85,7 +88,7 @@ contract WorkflowTests is Test {
         console.log("Step 2: Reveal spec with", MIN_BOND, "ETH bond");
 
         vm.prank(specProvider);
-        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce, metadataHash);
 
         assertTrue(uid != bytes32(0), "UID should be created");
         console.log("   UID:", vm.toString(uid));
@@ -115,7 +118,7 @@ contract WorkflowTests is Test {
         // Step 5: Finalize on registry
         console.log("Step 5: Finalize on registry");
 
-        bytes32 leaf = keccak256(abi.encodePacked(chainId, extcodehash, blobHash, uint64(1), false));
+        bytes32 leaf = keccak256(abi.encode(LEAF_TYPEHASH, chainId, extcodehash, metadataHash, uint64(1), false));
         bytes32[] memory proof = new bytes32[](0);
 
         vm.prank(specProvider);
@@ -151,6 +154,7 @@ contract WorkflowTests is Test {
         console.log("\n=== Workflow: Rejection Flow ===\n");
 
         bytes32 blobHash = keccak256("bad-metadata");
+        bytes32 metadataHash = keccak256("bad-metadata-content");
         bytes32 extcodehash = keccak256("some-contract");
         uint256 chainId = 1;
         uint256 nonce = block.timestamp;
@@ -163,7 +167,7 @@ contract WorkflowTests is Test {
         bytes32 commitmentId = registry.commitSpec(commitment, chainId, extcodehash);
 
         vm.prank(specProvider);
-        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce, metadataHash);
 
         bytes32 questionId = registry.questionIds(uid);
         console.log("   UID:", vm.toString(uid));
@@ -213,6 +217,7 @@ contract WorkflowTests is Test {
         console.log("\n=== Workflow: Revocation Flow ===\n");
 
         bytes32 blobHash = keccak256("initially-good-metadata");
+        bytes32 metadataHash = keccak256("initially-good-metadata-content");
         bytes32 extcodehash = keccak256("target-contract");
         uint256 chainId = 1;
         uint256 nonce = block.timestamp;
@@ -225,7 +230,7 @@ contract WorkflowTests is Test {
         bytes32 commitmentId = registry.commitSpec(commitment, chainId, extcodehash);
 
         vm.prank(specProvider);
-        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce, metadataHash);
 
         bytes32 questionId = registry.questionIds(uid);
 
@@ -234,7 +239,7 @@ contract WorkflowTests is Test {
 
         vm.warp(block.timestamp + DEFAULT_TIMEOUT + 1);
 
-        bytes32 leaf = keccak256(abi.encodePacked(chainId, extcodehash, blobHash, uint64(1), false));
+        bytes32 leaf = keccak256(abi.encode(LEAF_TYPEHASH, chainId, extcodehash, metadataHash, uint64(1), false));
         bytes32[] memory proof = new bytes32[](0);
         vm.prank(specProvider);
         registry.finalize(uid, leaf, proof);
@@ -292,6 +297,7 @@ contract WorkflowTests is Test {
         console.log("\n=== Workflow: Escalation Battle ===\n");
 
         bytes32 blobHash = keccak256("controversial-metadata");
+        bytes32 metadataHash = keccak256("controversial-metadata-content");
         bytes32 extcodehash = keccak256("controversial-contract");
         uint256 chainId = 1;
         uint256 nonce = block.timestamp;
@@ -302,7 +308,7 @@ contract WorkflowTests is Test {
         bytes32 commitmentId = registry.commitSpec(commitment, chainId, extcodehash);
 
         vm.prank(specProvider);
-        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce, metadataHash);
 
         bytes32 questionId = registry.questionIds(uid);
         console.log("Spec submitted, questionId:", vm.toString(questionId));
@@ -344,7 +350,7 @@ contract WorkflowTests is Test {
         console.log("Total bonds committed: ~", MIN_BOND * 7);
 
         // Finalize
-        bytes32 leaf = keccak256(abi.encodePacked(chainId, extcodehash, blobHash, uint64(1), false));
+        bytes32 leaf = keccak256(abi.encode(LEAF_TYPEHASH, chainId, extcodehash, metadataHash, uint64(1), false));
         bytes32[] memory proof = new bytes32[](0);
         vm.prank(specProvider);
         registry.finalize(uid, leaf, proof);
@@ -365,20 +371,21 @@ contract WorkflowTests is Test {
 
         // Submit first spec
         bytes32 blobHash1 = keccak256("spec-v1");
+        bytes32 metadataHash1 = keccak256("spec-v1-metadata-content");
         uint256 nonce1 = block.timestamp;
 
         bytes32 commitment1 = keccak256(abi.encodePacked(blobHash1, nonce1));
         vm.prank(specProvider);
         bytes32 commitmentId1 = registry.commitSpec(commitment1, chainId, extcodehash);
         vm.prank(specProvider);
-        bytes32 uid1 = registry.revealSpec{value: MIN_BOND}(commitmentId1, blobHash1, nonce1);
+        bytes32 uid1 = registry.revealSpec{value: MIN_BOND}(commitmentId1, blobHash1, nonce1, metadataHash1);
 
         bytes32 questionId1 = registry.questionIds(uid1);
         vm.prank(voter1);
         realityETH.submitAnswer{value: MIN_BOND}(questionId1, bytes32(uint256(1)), 0);
         vm.warp(block.timestamp + DEFAULT_TIMEOUT + 1);
 
-        bytes32 leaf1 = keccak256(abi.encodePacked(chainId, extcodehash, blobHash1, uint64(1), false));
+        bytes32 leaf1 = keccak256(abi.encode(LEAF_TYPEHASH, chainId, extcodehash, metadataHash1, uint64(1), false));
         bytes32[] memory proof = new bytes32[](0);
         vm.prank(specProvider);
         registry.finalize(uid1, leaf1, proof);
@@ -387,20 +394,21 @@ contract WorkflowTests is Test {
 
         // Submit second spec (improved version)
         bytes32 blobHash2 = keccak256("spec-v2-improved");
+        bytes32 metadataHash2 = keccak256("spec-v2-metadata-content");
         uint256 nonce2 = block.timestamp + 1;
 
         bytes32 commitment2 = keccak256(abi.encodePacked(blobHash2, nonce2));
         vm.prank(specProvider);
         bytes32 commitmentId2 = registry.commitSpec(commitment2, chainId, extcodehash);
         vm.prank(specProvider);
-        bytes32 uid2 = registry.revealSpec{value: MIN_BOND}(commitmentId2, blobHash2, nonce2);
+        bytes32 uid2 = registry.revealSpec{value: MIN_BOND}(commitmentId2, blobHash2, nonce2, metadataHash2);
 
         bytes32 questionId2 = registry.questionIds(uid2);
         vm.prank(voter1);
         realityETH.submitAnswer{value: MIN_BOND}(questionId2, bytes32(uint256(1)), 0);
         vm.warp(block.timestamp + DEFAULT_TIMEOUT + 1);
 
-        bytes32 leaf2 = keccak256(abi.encodePacked(chainId, extcodehash, blobHash2, uint64(2), false));
+        bytes32 leaf2 = keccak256(abi.encode(LEAF_TYPEHASH, chainId, extcodehash, metadataHash2, uint64(2), false));
         vm.prank(specProvider);
         registry.finalize(uid2, leaf2, proof);
 

@@ -44,6 +44,8 @@ contract BTokenForkTest is Test {
     uint256 constant MIN_BOND = 0.01 ether;
     uint256 constant MIN_TOKEN_BOND = 100 ether; // 100 bTokens
     uint32 constant DEFAULT_TIMEOUT = 48 hours;
+    bytes32 constant LEAF_TYPEHASH =
+        keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,uint256 idx,bool revoked)");
 
     // ========== STATE ==========
 
@@ -58,6 +60,7 @@ contract BTokenForkTest is Test {
 
     // Test data
     bytes32 public testBlobHash;
+    bytes32 public testMetadataHash;
     bytes32 public testExtcodehash;
     uint256 public testChainId;
 
@@ -82,6 +85,7 @@ contract BTokenForkTest is Test {
 
         // Set up test data
         testBlobHash = keccak256("test-blob-hash-btoken");
+        testMetadataHash = keccak256("test-metadata-content-btoken");
         testExtcodehash = keccak256("test-extcodehash-btoken");
         testChainId = 1;
 
@@ -139,7 +143,7 @@ contract BTokenForkTest is Test {
 
         vm.startPrank(_proposer);
         commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
-        uid = registry.revealSpec{value: _bond}(commitmentId, _blobHash, nonce);
+        uid = registry.revealSpec{value: _bond}(commitmentId, _blobHash, nonce, testMetadataHash);
         vm.stopPrank();
 
         questionId = registry.questionIds(uid);
@@ -159,7 +163,7 @@ contract BTokenForkTest is Test {
         bToken.approve(address(registry), _tokenAmount);
 
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
-        uid = registry.revealSpecToken(commitmentId, _blobHash, nonce, _tokenAmount);
+        uid = registry.revealSpecToken(commitmentId, _blobHash, nonce, testMetadataHash, _tokenAmount);
         vm.stopPrank();
 
         questionId = registry.questionIds(uid);
@@ -256,7 +260,7 @@ contract BTokenForkTest is Test {
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
 
         vm.expectRevert(abi.encodeWithSignature("UseRevealSpecToken()"));
-        registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce);
+        registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
         vm.stopPrank();
 
         console.log("ETH revealSpec correctly blocked in bToken mode!");
@@ -275,7 +279,7 @@ contract BTokenForkTest is Test {
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
 
         vm.expectRevert(abi.encodeWithSignature("UseRevealSpecETH()"));
-        registry.revealSpecToken(commitmentId, testBlobHash, nonce, MIN_TOKEN_BOND);
+        registry.revealSpecToken(commitmentId, testBlobHash, nonce, testMetadataHash, MIN_TOKEN_BOND);
         vm.stopPrank();
 
         console.log("Token revealSpecToken correctly blocked in ETH mode!");
@@ -297,7 +301,7 @@ contract BTokenForkTest is Test {
 
         // Warp and finalize
         vm.warp(block.timestamp + DEFAULT_TIMEOUT + 1);
-        bytes32 leaf = keccak256(abi.encodePacked(testChainId, testExtcodehash, testBlobHash, uint64(1), false));
+        bytes32 leaf = keccak256(abi.encode(LEAF_TYPEHASH, testChainId, testExtcodehash, testMetadataHash, uint64(1), false));
         bytes32[] memory proof = new bytes32[](0);
         vm.prank(proposer);
         registry.finalize(uid, leaf, proof);
@@ -416,7 +420,7 @@ contract BTokenForkTest is Test {
         // The question was created on realityETH (ETH version), not realityETH_ERC20
         // This should cause issues because the question doesn't exist on realityETH_ERC20
 
-        bytes32 leaf = keccak256(abi.encodePacked(testChainId, testExtcodehash, testBlobHash, uint64(1), false));
+        bytes32 leaf = keccak256(abi.encode(LEAF_TYPEHASH, testChainId, testExtcodehash, testMetadataHash, uint64(1), false));
         bytes32[] memory proof = new bytes32[](0);
 
         // The attestation cannot be properly finalized because:
@@ -473,7 +477,7 @@ contract BTokenForkTest is Test {
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
 
         vm.expectRevert(abi.encodeWithSignature("UseRevealSpecToken()"));
-        registry.revealSpec{value: MIN_BOND}(commitmentId, keccak256("blocked"), nonce);
+        registry.revealSpec{value: MIN_BOND}(commitmentId, keccak256("blocked"), nonce, testMetadataHash);
         vm.stopPrank();
 
         console.log("3. ETH revealSpec correctly blocked after bToken activation");

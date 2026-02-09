@@ -17,6 +17,8 @@ contract SecurityTests is Test {
     address constant NO_ARBITRATOR = address(0);
     uint256 constant MIN_BOND = 0.01 ether;
     uint32 constant DEFAULT_TIMEOUT = 48 hours;
+    bytes32 constant LEAF_TYPEHASH =
+        keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,uint256 idx,bool revoked)");
 
     // ========== STATE ==========
     KaiSignRegistry public registry;
@@ -28,6 +30,7 @@ contract SecurityTests is Test {
 
     // Test data
     bytes32 public testBlobHash;
+    bytes32 public testMetadataHash;
     bytes32 public testExtcodehash;
     uint256 public testChainId;
 
@@ -46,6 +49,7 @@ contract SecurityTests is Test {
         vm.deal(attacker, 100 ether);
 
         testBlobHash = keccak256("test-blob");
+        testMetadataHash = keccak256("test-metadata-content");
         testExtcodehash = keccak256("test-bytecode");
         testChainId = 1;
 
@@ -135,7 +139,7 @@ contract SecurityTests is Test {
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
 
         vm.expectRevert(abi.encodeWithSignature("EmptyBlobHash()"));
-        registry.revealSpec{value: MIN_BOND}(commitmentId, bytes32(0), nonce);
+        registry.revealSpec{value: MIN_BOND}(commitmentId, bytes32(0), nonce, testMetadataHash);
         vm.stopPrank();
     }
 
@@ -147,7 +151,7 @@ contract SecurityTests is Test {
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
 
         vm.expectRevert(abi.encodeWithSignature("BelowMinBond()"));
-        registry.revealSpec{value: MIN_BOND - 1}(commitmentId, testBlobHash, nonce);
+        registry.revealSpec{value: MIN_BOND - 1}(commitmentId, testBlobHash, nonce, testMetadataHash);
         vm.stopPrank();
     }
 
@@ -161,11 +165,11 @@ contract SecurityTests is Test {
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
 
         // First reveal succeeds
-        registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce);
+        registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
 
         // Second reveal fails
         vm.expectRevert(abi.encodeWithSignature("CommitmentAlreadyRevealed()"));
-        registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce);
+        registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
         vm.stopPrank();
     }
 
@@ -180,7 +184,7 @@ contract SecurityTests is Test {
 
         // Wrong nonce
         vm.expectRevert(abi.encodeWithSignature("InvalidReveal()"));
-        registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, 99999);
+        registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, 99999, testMetadataHash);
         vm.stopPrank();
     }
 
@@ -193,7 +197,7 @@ contract SecurityTests is Test {
 
         // Wrong blob hash
         vm.expectRevert(abi.encodeWithSignature("InvalidReveal()"));
-        registry.revealSpec{value: MIN_BOND}(commitmentId, keccak256("wrong"), nonce);
+        registry.revealSpec{value: MIN_BOND}(commitmentId, keccak256("wrong"), nonce, testMetadataHash);
         vm.stopPrank();
     }
 
@@ -208,7 +212,7 @@ contract SecurityTests is Test {
         // Attacker tries to reveal
         vm.prank(attacker);
         vm.expectRevert(abi.encodeWithSignature("InvalidReveal()"));
-        registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce);
+        registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
     }
 
     function test_Security_CommitmentNotFound() public {
@@ -216,7 +220,7 @@ contract SecurityTests is Test {
 
         vm.prank(attester);
         vm.expectRevert(abi.encodeWithSignature("CommitmentNotFound()"));
-        registry.revealSpec{value: MIN_BOND}(fakeCommitmentId, testBlobHash, 12345);
+        registry.revealSpec{value: MIN_BOND}(fakeCommitmentId, testBlobHash, 12345, testMetadataHash);
     }
 
     // ========== MODE ENFORCEMENT ==========
@@ -230,7 +234,7 @@ contract SecurityTests is Test {
 
         // Try token function in ETH mode
         vm.expectRevert(abi.encodeWithSignature("UseRevealSpecETH()"));
-        registry.revealSpecToken(commitmentId, testBlobHash, nonce, MIN_BOND);
+        registry.revealSpecToken(commitmentId, testBlobHash, nonce, testMetadataHash, MIN_BOND);
         vm.stopPrank();
     }
 
@@ -242,7 +246,7 @@ contract SecurityTests is Test {
 
         vm.startPrank(attester);
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
-        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce);
+        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
         vm.stopPrank();
 
         // Try to finalize before Reality.eth question is answered
@@ -261,7 +265,7 @@ contract SecurityTests is Test {
 
         vm.startPrank(attester);
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
-        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce);
+        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
         vm.stopPrank();
 
         bytes32 questionId = registry.questionIds(uid);
@@ -274,7 +278,7 @@ contract SecurityTests is Test {
         vm.warp(block.timestamp + DEFAULT_TIMEOUT + 1);
 
         // First finalize
-        bytes32 leaf = keccak256(abi.encodePacked(testChainId, testExtcodehash, testBlobHash, uint64(1), false));
+        bytes32 leaf = keccak256(abi.encode(LEAF_TYPEHASH, testChainId, testExtcodehash, testMetadataHash, uint64(1), false));
         bytes32[] memory proof = new bytes32[](0);
 
         vm.prank(attester);
@@ -294,7 +298,7 @@ contract SecurityTests is Test {
 
         vm.startPrank(attester);
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
-        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce);
+        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
         vm.stopPrank();
 
         // Try to revoke before finalized
@@ -310,7 +314,7 @@ contract SecurityTests is Test {
 
         vm.startPrank(attester);
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
-        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce);
+        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
         vm.stopPrank();
 
         bytes32 questionId = registry.questionIds(uid);
@@ -354,7 +358,7 @@ contract SecurityTests is Test {
 
         vm.prank(attester);
         vm.expectRevert();
-        registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce);
+        registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
     }
 
     function test_Security_Paused_Finalize() public {
@@ -364,7 +368,7 @@ contract SecurityTests is Test {
 
         vm.startPrank(attester);
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
-        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce);
+        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
         vm.stopPrank();
 
         bytes32 questionId = registry.questionIds(uid);
@@ -391,7 +395,7 @@ contract SecurityTests is Test {
 
         vm.startPrank(attester);
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
-        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce);
+        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
         vm.stopPrank();
 
         bytes32 questionId = registry.questionIds(uid);
@@ -400,7 +404,7 @@ contract SecurityTests is Test {
 
         vm.warp(block.timestamp + DEFAULT_TIMEOUT + 1);
 
-        bytes32 leaf = keccak256(abi.encodePacked(testChainId, testExtcodehash, testBlobHash, uint64(1), false));
+        bytes32 leaf = keccak256(abi.encode(LEAF_TYPEHASH, testChainId, testExtcodehash, testMetadataHash, uint64(1), false));
         bytes32[] memory proof = new bytes32[](0);
         vm.prank(attester);
         registry.finalize(uid, leaf, proof);

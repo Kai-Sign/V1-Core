@@ -48,10 +48,13 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     error NoRevokeProposal();
     error InvalidMerkleProof();
     error BelowMinBond();
+    error EmptyMetadataHash();
 
     // ========== CONSTANTS ==========
     string public constant VERSION = "2.0.0";
     uint32 public constant DEFAULT_TIMEOUT = 48 hours;
+    bytes32 public constant LEAF_TYPEHASH =
+        keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,uint256 idx,bool revoked)");
 
     // ========== FORK-READY: Universe tracking ==========
     uint256 public immutable override universeId;
@@ -253,12 +256,13 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     function revealSpec(
         bytes32 commitmentId,
         bytes32 blobHash,
-        uint256 nonce
+        uint256 nonce,
+        bytes32 metadataHash
     ) external payable nonReentrant whenNotPaused returns (bytes32 uid) {
         if (address(bondToken) != address(0)) revert UseRevealSpecToken();
         if (msg.value < minBond) revert BelowMinBond();
 
-        uid = _revealSpec(commitmentId, blobHash, nonce);
+        uid = _revealSpec(commitmentId, blobHash, nonce, metadataHash);
 
         // Create Reality.eth question with ETH bond
         string memory questionParams = _buildQuestionParams(
@@ -294,12 +298,13 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         bytes32 commitmentId,
         bytes32 blobHash,
         uint256 nonce,
+        bytes32 metadataHash,
         uint256 tokenAmount
     ) external nonReentrant whenNotPaused returns (bytes32 uid) {
         if (address(bondToken) == address(0)) revert UseRevealSpecETH();
         if (tokenAmount < minBond) revert BelowMinBond();
 
-        uid = _revealSpec(commitmentId, blobHash, nonce);
+        uid = _revealSpec(commitmentId, blobHash, nonce, metadataHash);
 
         // Transfer bToken from user and approve Reality.eth ERC20
         bondToken.safeTransferFrom(msg.sender, address(this), tokenAmount);
@@ -333,7 +338,8 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     function _revealSpec(
         bytes32 commitmentId,
         bytes32 blobHash,
-        uint256 nonce
+        uint256 nonce,
+        bytes32 metadataHash
     ) internal returns (bytes32 uid) {
         CommitData storage commitment = commitments[commitmentId];
 
@@ -341,6 +347,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         if (commitment.committer != msg.sender) revert InvalidReveal();
         if (commitment.isRevealed) revert CommitmentAlreadyRevealed();
         if (blobHash == bytes32(0)) revert EmptyBlobHash();
+        if (metadataHash == bytes32(0)) revert EmptyMetadataHash();
 
         // Verify commitment
         // Note: must cast commitTimestamp to uint256 to match how commitmentId was computed
@@ -371,6 +378,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
             chainId: commitment.chainId,
             extcodehash: commitment.extcodehash,
             blobHash: blobHash,
+            metadataHash: metadataHash,
             attester: msg.sender,
             timestamp: uint64(block.timestamp),
             idx: 0,  // Will be assigned on finalization if approved
@@ -450,11 +458,12 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
             // Index by chain and bytecode
             _specsByChainAndBytecode[att.chainId][att.extcodehash].push(uid);
 
-            // Compute leaf hash
-            bytes32 leaf = keccak256(abi.encodePacked(
+            // Compute leaf hash (EIP-712-style domain separation)
+            bytes32 leaf = keccak256(abi.encode(
+                LEAF_TYPEHASH,
                 att.chainId,
                 att.extcodehash,
-                att.blobHash,
+                att.metadataHash,
                 att.idx,
                 false  // not revoked
             ));
@@ -614,10 +623,11 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         if (att.timestamp == 0) revert AttestationNotFound();
         if (att.finalizedAt == 0) revert NotFinalized();
 
-        leaf = keccak256(abi.encodePacked(
+        leaf = keccak256(abi.encode(
+            LEAF_TYPEHASH,
             att.chainId,
             att.extcodehash,
-            att.blobHash,
+            att.metadataHash,
             att.idx,
             att.revoked
         ));

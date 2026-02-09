@@ -16,6 +16,9 @@ contract KaiSignRegistryTest is Test {
     address constant REALITY_ETH_SEPOLIA = 0xaf33DcB6E8c5c4D9dDF579f53031b514d19449CA;
     address constant NO_ARBITRATOR = address(0);
     uint256 constant MIN_BOND = 0.01 ether;
+    uint32 constant DEFAULT_TIMEOUT = 48 hours;
+    bytes32 constant LEAF_TYPEHASH =
+        keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,uint256 idx,bool revoked)");
 
     // ========== STATE ==========
     KaiSignRegistry public registry;
@@ -247,6 +250,7 @@ contract KaiSignRegistryTest is Test {
 
     function test_RevealSpec() public {
         bytes32 blobHash = keccak256("blob-data");
+        bytes32 metadataHash = keccak256("metadata-content");
         uint256 nonce = 12345;
         bytes32 commitment = keccak256(abi.encodePacked(blobHash, nonce));
         uint256 chainId = 1;
@@ -254,7 +258,7 @@ contract KaiSignRegistryTest is Test {
 
         vm.startPrank(attester1);
         bytes32 commitmentId = registry.commitSpec(commitment, chainId, extcodehash);
-        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce, metadataHash);
         vm.stopPrank();
 
         assertTrue(uid != bytes32(0));
@@ -263,11 +267,13 @@ contract KaiSignRegistryTest is Test {
         assertEq(att.chainId, chainId);
         assertEq(att.extcodehash, extcodehash);
         assertEq(att.blobHash, blobHash);
+        assertEq(att.metadataHash, metadataHash);
         assertEq(att.attester, attester1);
     }
 
     function test_RevealSpec_BelowMinBond() public {
         bytes32 blobHash = keccak256("blob-data");
+        bytes32 metadataHash = keccak256("metadata-content");
         uint256 nonce = 12345;
         bytes32 commitment = keccak256(abi.encodePacked(blobHash, nonce));
 
@@ -275,12 +281,13 @@ contract KaiSignRegistryTest is Test {
         bytes32 commitmentId = registry.commitSpec(commitment, 1, keccak256("bytecode"));
 
         vm.expectRevert(abi.encodeWithSignature("BelowMinBond()"));
-        registry.revealSpec{value: MIN_BOND - 1}(commitmentId, blobHash, nonce);
+        registry.revealSpec{value: MIN_BOND - 1}(commitmentId, blobHash, nonce, metadataHash);
         vm.stopPrank();
     }
 
     function test_RevealSpec_InvalidCommitment() public {
         bytes32 blobHash = keccak256("blob-data");
+        bytes32 metadataHash = keccak256("metadata-content");
         uint256 nonce = 12345;
         bytes32 commitment = keccak256(abi.encodePacked(blobHash, nonce));
 
@@ -289,22 +296,23 @@ contract KaiSignRegistryTest is Test {
 
         // Wrong nonce
         vm.expectRevert(abi.encodeWithSignature("InvalidReveal()"));
-        registry.revealSpec{value: MIN_BOND}(commitmentId, blobHash, 99999);
+        registry.revealSpec{value: MIN_BOND}(commitmentId, blobHash, 99999, metadataHash);
         vm.stopPrank();
     }
 
     function test_RevealSpec_DoubleReveal() public {
         bytes32 blobHash = keccak256("blob-data");
+        bytes32 metadataHash = keccak256("metadata-content");
         uint256 nonce = 12345;
         bytes32 commitment = keccak256(abi.encodePacked(blobHash, nonce));
 
         vm.startPrank(attester1);
         bytes32 commitmentId = registry.commitSpec(commitment, 1, keccak256("bytecode"));
-        registry.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        registry.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce, metadataHash);
 
         // Try to reveal again
         vm.expectRevert(abi.encodeWithSignature("CommitmentAlreadyRevealed()"));
-        registry.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce);
+        registry.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce, metadataHash);
         vm.stopPrank();
     }
 
@@ -345,5 +353,146 @@ contract KaiSignRegistryTest is Test {
 
     function test_MerkleRoot() public view {
         assertEq(registry.merkleRoot(), bytes32(0));
+    }
+
+    // ========== EIP-712 LEAF HASH TESTS ==========
+
+    function test_LeafTypehashValue() public view {
+        bytes32 expected = keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,uint256 idx,bool revoked)");
+        assertEq(registry.LEAF_TYPEHASH(), expected, "LEAF_TYPEHASH should match EIP-712 schema string");
+    }
+
+    function test_LeafHashConsistency_OnChainMatchesOffChain() public {
+        // Setup: commit-reveal-approve-finalize to create an approved attestation
+        bytes32 blobHash = keccak256("consistency-test-blob");
+        bytes32 metadataHash = keccak256("consistency-test-metadata-content");
+        bytes32 extcodehash = keccak256("consistency-test-bytecode");
+        uint256 chainId = 1;
+        uint256 nonce = 12345;
+
+        bytes32 commitment = keccak256(abi.encodePacked(blobHash, nonce));
+        vm.startPrank(attester1);
+        bytes32 commitmentId = registry.commitSpec(commitment, chainId, extcodehash);
+        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce, metadataHash);
+        vm.stopPrank();
+
+        bytes32 questionId = registry.questionIds(uid);
+
+        // Vote APPROVE
+        vm.prank(attester1);
+        realityETH.submitAnswer{value: MIN_BOND}(questionId, bytes32(uint256(1)), 0);
+
+        // Wait for timeout
+        vm.warp(block.timestamp + DEFAULT_TIMEOUT + 1);
+
+        // Finalize with EIP-712 leaf
+        bytes32 leaf = keccak256(abi.encode(LEAF_TYPEHASH, chainId, extcodehash, metadataHash, uint64(1), false));
+        bytes32[] memory proof = new bytes32[](0);
+        vm.prank(attester1);
+        registry.finalize(uid, leaf, proof);
+
+        // Compute leaf "off-chain" (simulated in test)
+        bytes32 offChainTypehash = keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,uint256 idx,bool revoked)");
+        bytes32 offChainLeaf = keccak256(abi.encode(
+            offChainTypehash,
+            uint256(1),               // chainId
+            extcodehash,
+            metadataHash,
+            uint256(1),               // idx (cast to uint256 as off-chain systems would)
+            false                     // revoked
+        ));
+
+        // Compute leaf on-chain via contract
+        bytes32 onChainLeaf = registry.computeAttestationLeaf(uid);
+
+        // Assert match
+        assertEq(offChainLeaf, onChainLeaf, "Off-chain and on-chain leaf hashes must match");
+        assertEq(leaf, onChainLeaf, "Finalization leaf and computeAttestationLeaf must match");
+    }
+
+    function test_LeafHashDeterministic() public view {
+        // Verify that the same inputs always produce the same leaf hash
+        bytes32 typehash = keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,uint256 idx,bool revoked)");
+
+        uint256 chainId = 42161; // Arbitrum
+        bytes32 extcodehash = keccak256("some-contract");
+        bytes32 metadataHash = keccak256("some-metadata");
+        uint64 idx = 5;
+        bool revoked = false;
+
+        bytes32 hash1 = keccak256(abi.encode(typehash, chainId, extcodehash, metadataHash, idx, revoked));
+        bytes32 hash2 = keccak256(abi.encode(typehash, chainId, extcodehash, metadataHash, idx, revoked));
+
+        assertEq(hash1, hash2, "Same inputs must produce same leaf hash");
+
+        // Different inputs must produce different hash
+        bytes32 hash3 = keccak256(abi.encode(typehash, chainId, extcodehash, metadataHash, idx, true));
+        assertTrue(hash1 != hash3, "Different revoked status must produce different hash");
+    }
+
+    // ========== 5-STEP VERIFICATION TRUST CHAIN TEST ==========
+
+    function test_FiveStepVerificationTrustChain() public {
+        // === Setup: known metadata bytes ===
+        bytes memory metadataBytes = '{"contract":"UniswapV3Router","chain":1,"methods":["exactInputSingle"]}';
+        bytes32 metadataHash = keccak256(metadataBytes);
+        bytes32 blobHash = keccak256("erc7730-blob-reference");
+        bytes32 extcodehash = keccak256("uniswap-v3-router-bytecode");
+        uint256 chainId = 1;
+        uint256 nonce = 12345;
+
+        // Full commit-reveal-finalize flow
+        bytes32 commitment = keccak256(abi.encodePacked(blobHash, nonce));
+        vm.startPrank(attester1);
+        bytes32 commitmentId = registry.commitSpec(commitment, chainId, extcodehash);
+        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, blobHash, nonce, metadataHash);
+        vm.stopPrank();
+
+        bytes32 questionId = registry.questionIds(uid);
+        vm.prank(attester1);
+        realityETH.submitAnswer{value: MIN_BOND}(questionId, bytes32(uint256(1)), 0);
+        vm.warp(block.timestamp + DEFAULT_TIMEOUT + 1);
+
+        bytes32 leaf = keccak256(abi.encode(LEAF_TYPEHASH, chainId, extcodehash, metadataHash, uint64(1), false));
+        bytes32[] memory proof = new bytes32[](0);
+        vm.prank(attester1);
+        registry.finalize(uid, leaf, proof);
+
+        // === STEP 1: On-chain commitment (root of trust) ===
+        // Merkle root R, leaf index idx, leaf hash L
+        bytes32 R = registry.merkleRoot();
+        assertTrue(R != bytes32(0), "Step 1: Merkle root must exist");
+
+        IKaiSignRegistry.Attestation memory att = registry.getAttestation(uid);
+        uint64 idx = att.idx;
+        assertTrue(idx > 0, "Step 1: Leaf index must be assigned");
+
+        bytes32 L = registry.computeAttestationLeaf(uid);
+        assertTrue(L != bytes32(0), "Step 1: Leaf hash must be computed");
+
+        // === STEP 2: Membership proof ===
+        // verifyMerkleProof(L, idx, proof, R) == true
+        bool verified = registry.verifyMerkleProof(L, proof, idx - 1, R);
+        assertTrue(verified, "Step 2: Merkle membership proof must pass");
+
+        // === STEP 3: Fetch metadata bytes (untrusted) ===
+        // Simulate fetching from Arweave/IPFS/gateway — this is hostile input
+        bytes memory fetchedMetadata = metadataBytes;
+
+        // === STEP 4: Recompute metadata hash (critical step) ===
+        // metadataHash' = HASH(canonical(metadataBytes))
+        bytes32 recomputedHash = keccak256(fetchedMetadata);
+
+        // === STEP 5: Final equality check ===
+        // metadataHash' == metadataHash (from leaf)
+        assertEq(recomputedHash, att.metadataHash, "Step 5: Recomputed hash must match on-chain metadataHash");
+
+        // Verify metadataHash is embedded in the leaf
+        bytes32 expectedLeaf = keccak256(abi.encode(
+            LEAF_TYPEHASH, chainId, extcodehash, recomputedHash, idx, false
+        ));
+        assertEq(expectedLeaf, L, "Step 5: Leaf must contain the metadataHash");
+
+        // Only here does metadata become trustworthy
     }
 }
