@@ -1,0 +1,92 @@
+{
+  "context": {
+    "eip712": {
+      "domain": {
+        "name": "Seaport",
+        "version": "1.6",
+        "chainId": 1,
+        "verifyingContract": "0x0000000000000068F116a894984e2DB1123eB395"
+      },
+      "primaryType": "OrderComponents",
+      "types": {
+        "EIP712Domain": [
+          { "name": "name", "type": "string" },
+          { "name": "version", "type": "string" },
+          { "name": "chainId", "type": "uint256" },
+          { "name": "verifyingContract", "type": "address" }
+        ],
+        "OrderComponents": [
+          { "name": "offerer", "type": "address" },
+          { "name": "zone", "type": "address" },
+          { "name": "offer", "type": "OfferItem[]" },
+          { "name": "consideration", "type": "ConsiderationItem[]" },
+          { "name": "orderType", "type": "uint8" },
+          { "name": "startTime", "type": "uint256" },
+          { "name": "endTime", "type": "uint256" },
+          { "name": "zoneHash", "type": "bytes32" },
+          { "name": "salt", "type": "uint256" },
+          { "name": "conduitKey", "type": "bytes32" },
+          { "name": "counter", "type": "uint256" }
+        ],
+        "OfferItem": [
+          { "name": "itemType", "type": "uint8" },
+          { "name": "token", "type": "address" },
+          { "name": "identifierOrCriteria", "type": "uint256" },
+          { "name": "startAmount", "type": "uint256" },
+          { "name": "endAmount", "type": "uint256" }
+        ],
+        "ConsiderationItem": [
+          { "name": "itemType", "type": "uint8" },
+          { "name": "token", "type": "address" },
+          { "name": "identifierOrCriteria", "type": "uint256" },
+          { "name": "startAmount", "type": "uint256" },
+          { "name": "endAmount", "type": "uint256" },
+          { "name": "recipient", "type": "address" }
+        ]
+      },
+      "name": "Seaport Order",
+      "description": "OpenSea Seaport marketplace order"
+    }
+  },
+  "display": {
+    "formats": {
+      "OrderComponents": {
+        "intent": "Sign Seaport order",
+        "fields": [
+          { "path": "offerer", "label": "Offerer", "format": "address" },
+          { "path": "offer", "label": "Offering", "format": "array" },
+          { "path": "consideration", "label": "Receiving", "format": "array" },
+          { "path": "orderType", "label": "Order Type", "format": "enum", "params": { "values": ["FULL_OPEN", "PARTIAL_OPEN", "FULL_RESTRICTED", "PARTIAL_RESTRICTED", "CONTRACT"] } },
+          { "path": "startTime", "label": "Start Time", "format": "timestamp" },
+          { "path": "endTime", "label": "End Time", "format": "timestamp" },
+          { "path": "zone", "label": "Zone", "format": "address" },
+          { "path": "zoneHash", "label": "Zone Hash", "format": "hex" },
+          { "path": "salt", "label": "Salt", "format": "hex" },
+          { "path": "conduitKey", "label": "Conduit Key", "format": "hex" },
+          { "path": "counter", "label": "Counter", "format": "integer" }
+        ]
+      },
+      "OfferItem": {
+        "intent": "Offer item",
+        "fields": [
+          { "path": "itemType", "label": "Type", "format": "enum", "params": { "values": ["NATIVE", "ERC20", "ERC721", "ERC1155", "ERC721_WITH_CRITERIA", "ERC1155_WITH_CRITERIA"] } },
+          { "path": "token", "label": "Token", "format": "address" },
+          { "path": "identifierOrCriteria", "label": "Token ID", "format": "integer" },
+          { "path": "startAmount", "label": "Start Amount", "format": "integer" },
+          { "path": "endAmount", "label": "End Amount", "format": "integer" }
+        ]
+      },
+      "ConsiderationItem": {
+        "intent": "Consideration item",
+        "fields": [
+          { "path": "itemType", "label": "Type", "format": "enum", "params": { "values": ["NATIVE", "ERC20", "ERC721", "ERC1155", "ERC721_WITH_CRITERIA", "ERC1155_WITH_CRITERIA"] } },
+          { "path": "token", "label": "Token", "format": "address" },
+          { "path": "identifierOrCriteria", "label": "Token ID", "format": "integer" },
+          { "path": "startAmount", "label": "Start Amount", "format": "integer" },
+          { "path": "endAmount", "label": "End Amount", "format": "integer" },
+          { "path": "recipient", "label": "Recipient", "format": "address" }
+        ]
+      }
+    }
+  }
+}

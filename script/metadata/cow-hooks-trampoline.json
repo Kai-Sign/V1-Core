@@ -1,0 +1,39 @@
+{
+  "$schema": "../../erc7730-v1.schema.json",
+  "context": {
+    "contract": {
+      "address": "0x60Bf78233f48eC42eE3F101b9a05eC7878728006",
+      "chainId": 1,
+      "name": "CoW Protocol HooksTrampoline",
+      "abi": [
+        {
+          "type": "function",
+          "name": "execute",
+          "selector": "0x760f2a0b",
+          "inputs": [
+            {
+              "name": "hooks",
+              "type": "tuple[]",
+              "components": [
+                { "name": "target", "type": "address" },
+                { "name": "callData", "type": "bytes" },
+                { "name": "gasLimit", "type": "uint256" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "display": {
+    "formats": {
+      "execute((address,bytes,uint256)[])": {
+        "intent": "Execute CoW Protocol hooks",
+        "interpolatedIntent": "Execute {hooks.length} hook(s) via CoW Protocol",
+        "fields": [
+          { "path": "hooks", "label": "Hooks", "format": "array" }
+        ]
+      }
+    }
+  }
+}

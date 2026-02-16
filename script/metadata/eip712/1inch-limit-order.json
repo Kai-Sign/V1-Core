@@ -1,0 +1,52 @@
+{
+  "context": {
+    "eip712": {
+      "domain": {
+        "name": "1inch Aggregation Router",
+        "version": "6",
+        "chainId": 1,
+        "verifyingContract": "0x111111125421cA6dc452d289314280a0f8842A65"
+      },
+      "primaryType": "Order",
+      "types": {
+        "EIP712Domain": [
+          { "name": "name", "type": "string" },
+          { "name": "version", "type": "string" },
+          { "name": "chainId", "type": "uint256" },
+          { "name": "verifyingContract", "type": "address" }
+        ],
+        "Order": [
+          { "name": "salt", "type": "uint256" },
+          { "name": "makerAsset", "type": "address" },
+          { "name": "takerAsset", "type": "address" },
+          { "name": "maker", "type": "address" },
+          { "name": "receiver", "type": "address" },
+          { "name": "allowedSender", "type": "address" },
+          { "name": "makingAmount", "type": "uint256" },
+          { "name": "takingAmount", "type": "uint256" },
+          { "name": "offsets", "type": "uint256" },
+          { "name": "interactions", "type": "bytes" }
+        ]
+      },
+      "name": "1inch Limit Order",
+      "description": "1inch Aggregation Router limit order"
+    }
+  },
+  "display": {
+    "formats": {
+      "Order": {
+        "intent": "Sign 1inch limit order",
+        "fields": [
+          { "path": "makerAsset", "label": "Sell Token", "format": "address" },
+          { "path": "takerAsset", "label": "Buy Token", "format": "address" },
+          { "path": "makingAmount", "label": "Sell Amount", "format": "amount", "params": { "tokenPath": "$.makerAsset" } },
+          { "path": "takingAmount", "label": "Buy Amount", "format": "amount", "params": { "tokenPath": "$.takerAsset" } },
+          { "path": "maker", "label": "Maker", "format": "address" },
+          { "path": "receiver", "label": "Receiver", "format": "address" },
+          { "path": "allowedSender", "label": "Allowed Sender", "format": "address" },
+          { "path": "salt", "label": "Salt", "format": "hex" }
+        ]
+      }
+    }
+  }
+}

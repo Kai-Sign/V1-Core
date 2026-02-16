@@ -1,0 +1,123 @@
+{
+  "$schema": "../../erc7730-v1.schema.json",
+  "context": {
+    "contract": {
+      "address": "0xfdaFc9d1902f4e0b84f65F49f244b32b31013b74",
+      "chainId": 1,
+      "name": "CoW Protocol ComposableCoW",
+      "abi": [
+        {
+          "type": "function",
+          "name": "create",
+          "selector": "0x6bfae1ca",
+          "inputs": [
+            {
+              "name": "params",
+              "type": "tuple",
+              "components": [
+                { "name": "handler", "type": "address" },
+                { "name": "salt", "type": "bytes32" },
+                { "name": "staticInput", "type": "bytes" }
+              ]
+            },
+            { "name": "dispatch", "type": "bool" }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "createWithContext",
+          "selector": "0x0c340a24",
+          "inputs": [
+            {
+              "name": "params",
+              "type": "tuple",
+              "components": [
+                { "name": "handler", "type": "address" },
+                { "name": "salt", "type": "bytes32" },
+                { "name": "staticInput", "type": "bytes" }
+              ]
+            },
+            { "name": "factory", "type": "address" },
+            { "name": "data", "type": "bytes" },
+            { "name": "dispatch", "type": "bool" }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "remove",
+          "selector": "0x95bc2673",
+          "inputs": [
+            { "name": "singleOrderHash", "type": "bytes32" }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "setRoot",
+          "selector": "0xf53f1014",
+          "inputs": [
+            { "name": "root", "type": "bytes32" },
+            {
+              "name": "proof",
+              "type": "tuple",
+              "components": [
+                { "name": "location", "type": "bytes32" },
+                { "name": "data", "type": "bytes32[]" }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "setSwapGuard",
+          "selector": "0x8f7984ed",
+          "inputs": [
+            { "name": "swapGuard", "type": "address" }
+          ]
+        }
+      ]
+    }
+  },
+  "display": {
+    "formats": {
+      "create((address,bytes32,bytes),bool)": {
+        "intent": "Create conditional order on CoW Protocol",
+        "interpolatedIntent": "Create conditional order with handler {params.handler}",
+        "fields": [
+          { "path": "params.handler", "label": "Order Handler", "format": "addressOrName" },
+          { "path": "params.salt", "label": "Salt", "format": "hex" },
+          { "path": "dispatch", "label": "Dispatch Event", "format": "boolean" }
+        ]
+      },
+      "createWithContext((address,bytes32,bytes),address,bytes,bool)": {
+        "intent": "Create conditional order with context",
+        "interpolatedIntent": "Create conditional order with handler {params.handler}",
+        "fields": [
+          { "path": "params.handler", "label": "Order Handler", "format": "addressOrName" },
+          { "path": "factory", "label": "Value Factory", "format": "addressOrName" },
+          { "path": "dispatch", "label": "Dispatch Event", "format": "boolean" }
+        ]
+      },
+      "remove(bytes32)": {
+        "intent": "Remove conditional order",
+        "interpolatedIntent": "Remove conditional order {singleOrderHash}",
+        "fields": [
+          { "path": "singleOrderHash", "label": "Order Hash", "format": "hex" }
+        ]
+      },
+      "setRoot(bytes32,(bytes32,bytes32[]))": {
+        "intent": "Set merkle root for batch orders",
+        "interpolatedIntent": "Set merkle root {root}",
+        "fields": [
+          { "path": "root", "label": "Merkle Root", "format": "hex" }
+        ]
+      },
+      "setSwapGuard(address)": {
+        "intent": "Set swap guard for conditional orders",
+        "interpolatedIntent": "Set swap guard to {swapGuard}",
+        "fields": [
+          { "path": "swapGuard", "label": "Swap Guard", "format": "addressOrName" }
+        ]
+      }
+    }
+  }
+}
