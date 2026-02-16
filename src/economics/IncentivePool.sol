@@ -208,6 +208,55 @@ contract IncentivePool is Ownable2Step, ReentrancyGuard {
         );
     }
 
+    // ========== INTERNAL HELPERS ==========
+
+    /**
+     * @notice Calculate platform fee and claimer amount
+     * @param amount Total amount
+     * @return platformFee Fee for treasury
+     * @return claimerAmount Amount for claimer
+     */
+    function _calculateFees(uint256 amount) internal pure returns (uint256 platformFee, uint256 claimerAmount) {
+        platformFee = (amount * PLATFORM_FEE_PERCENT) / 100;
+        claimerAmount = amount - platformFee;
+    }
+
+    /**
+     * @notice Transfer funds with platform fee split
+     * @param amount Total amount to distribute
+     * @param claimer Recipient of claimer portion
+     * @param isToken True for ERC20, false for ETH
+     */
+    function _transferWithFee(uint256 amount, address claimer, bool isToken) internal {
+        (uint256 platformFee, uint256 claimerAmount) = _calculateFees(amount);
+
+        if (isToken) {
+            incentiveToken.safeTransfer(claimer, claimerAmount);
+            incentiveToken.safeTransfer(treasury, platformFee);
+        } else {
+            (bool success1, ) = payable(claimer).call{value: claimerAmount}("");
+            if (!success1) revert TransferFailed();
+
+            (bool success2, ) = treasury.call{value: platformFee}("");
+            if (!success2) revert TransferFailed();
+        }
+    }
+
+    /**
+     * @notice Transfer funds without fee (for clawback/emergency)
+     * @param to Recipient
+     * @param amount Amount to transfer
+     * @param isToken True for ERC20, false for ETH
+     */
+    function _transfer(address to, uint256 amount, bool isToken) internal {
+        if (isToken) {
+            incentiveToken.safeTransfer(to, amount);
+        } else {
+            (bool success, ) = payable(to).call{value: amount}("");
+            if (!success) revert TransferFailed();
+        }
+    }
+
     // ========== INCENTIVE CLAIMING ==========
 
     /**
@@ -229,22 +278,10 @@ contract IncentivePool is Ownable2Step, ReentrancyGuard {
 
         poolByBytecode[extcodehash] = 0;
 
-        uint256 platformFee = (poolAmount * PLATFORM_FEE_PERCENT) / 100;
-        uint256 claimerAmount = poolAmount - platformFee;
+        bool isToken = address(incentiveToken) != address(0);
+        _transferWithFee(poolAmount, claimer, isToken);
 
-        if (address(incentiveToken) == address(0)) {
-            // ETH mode
-            (bool success1, ) = payable(claimer).call{value: claimerAmount}("");
-            if (!success1) revert TransferFailed();
-
-            (bool success2, ) = treasury.call{value: platformFee}("");
-            if (!success2) revert TransferFailed();
-        } else {
-            // Token mode
-            incentiveToken.safeTransfer(claimer, claimerAmount);
-            incentiveToken.safeTransfer(treasury, platformFee);
-        }
-
+        (, uint256 claimerAmount) = _calculateFees(poolAmount);
         emit IncentiveClaimed(bytes32(0), claimer, uid, claimerAmount);
     }
 
@@ -271,24 +308,14 @@ contract IncentivePool is Ownable2Step, ReentrancyGuard {
         incentive.isActive = false;
 
         uint256 amount = incentive.amount;
-        uint256 platformFee = (amount * PLATFORM_FEE_PERCENT) / 100;
-        uint256 claimerAmount = amount - platformFee;
 
         // Update pool
         poolByBytecode[incentive.extcodehash] -= amount;
         contributorCount[incentive.extcodehash]--;
 
-        if (incentive.isToken) {
-            incentiveToken.safeTransfer(claimer, claimerAmount);
-            incentiveToken.safeTransfer(treasury, platformFee);
-        } else {
-            (bool success1, ) = payable(claimer).call{value: claimerAmount}("");
-            if (!success1) revert TransferFailed();
+        _transferWithFee(amount, claimer, incentive.isToken);
 
-            (bool success2, ) = treasury.call{value: platformFee}("");
-            if (!success2) revert TransferFailed();
-        }
-
+        (, uint256 claimerAmount) = _calculateFees(amount);
         emit IncentiveClaimed(incentiveId, claimer, uid, claimerAmount);
     }
 
@@ -314,12 +341,7 @@ contract IncentivePool is Ownable2Step, ReentrancyGuard {
         poolByBytecode[incentive.extcodehash] -= amount;
         contributorCount[incentive.extcodehash]--;
 
-        if (incentive.isToken) {
-            incentiveToken.safeTransfer(msg.sender, amount);
-        } else {
-            (bool success, ) = payable(msg.sender).call{value: amount}("");
-            if (!success) revert TransferFailed();
-        }
+        _transfer(msg.sender, amount, incentive.isToken);
 
         emit IncentiveClawback(incentiveId, msg.sender, amount);
     }
@@ -387,8 +409,7 @@ contract IncentivePool is Ownable2Step, ReentrancyGuard {
      */
     function emergencyWithdraw(address token, address to, uint256 amount) external onlyOwner {
         if (token == address(0)) {
-            (bool success, ) = payable(to).call{value: amount}("");
-            if (!success) revert TransferFailed();
+            _transfer(to, amount, false);
         } else {
             IERC20(token).safeTransfer(to, amount);
         }
