@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
-import "../src/test/PermissionedBToken.sol";
+import "../src/PermissionedBToken.sol";
 
 contract DeployPermissionedBToken is Script {
     function run() external {
