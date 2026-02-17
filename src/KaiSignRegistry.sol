@@ -61,8 +61,8 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     bytes32 public forkStateRoot;
 
     // ========== REALITY.ETH INTEGRATION ==========
-    IRealityETH public immutable realityETH;      // ETH version (Phase 1)
-    IRealityETH public realityETH_ERC20;          // ERC20 version (Phase 2) - set later
+    IRealityETH public immutable realityETH;      // ETH version
+    IRealityETH public realityETH_ERC20;          // ERC20 version
     address public immutable arbitrator;
     uint256 public templateId;
     uint256 public minBond;
@@ -178,7 +178,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     }
 
     /**
-     * @notice Reveal a committed spec with ETH bond (Phase 1)
+     * @notice Reveal a committed spec with ETH bond 
      * @param commitmentId The commitment to reveal
      * @param blobHash EIP-4844 blob hash containing metadata
      * @param nonce Nonce used in commitment
@@ -217,7 +217,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     }
 
     /**
-     * @notice Reveal a committed spec with bToken bond (Phase 2)
+     * @notice Reveal a committed spec with bToken bond 
      * @dev Caller must approve bToken first
      * @param commitmentId The commitment to reveal
      * @param blobHash EIP-4844 blob hash containing metadata
@@ -422,7 +422,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     // ========== REVOCATION ==========
 
     /**
-     * @notice Propose revocation with ETH bond (Phase 1)
+     * @notice Propose revocation with ETH bond
      * @param uid Attestation UID
      */
     function proposeRevoke(bytes32 uid) external payable nonReentrant whenNotPaused {
@@ -450,7 +450,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     }
 
     /**
-     * @notice Propose revocation with bToken bond (Phase 2)
+     * @notice Propose revocation with bToken bond
      * @param uid Attestation UID
      * @param tokenAmount Amount of bToken to bond
      */
@@ -651,7 +651,6 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     // ========== ECONOMICS INTEGRATION ==========
 
     /**
-     * @notice Transition to Phase 2 (bToken mode)
      * @param _bondToken The bToken address
      * @param _realityETH_ERC20 Reality.eth ERC20 version address
      */
