@@ -64,7 +64,9 @@ contract DeployKaiSign is Script {
             config.tokenName,
             config.tokenSymbol,
             initialAdmins,
-            config.initialSupply
+            config.initialSupply,
+            0,              // forkId = 0 for original
+            address(0)      // parentFork = address(0) for original
         );
 
         console.log("KAIToken deployed to:", address(kaiToken));
@@ -220,7 +222,9 @@ contract DeployKaiSignTestnet is Script {
             "Kai Token (Testnet)",
             "tKAI",
             initialAdmins,
-            100_000_000 * 1e18 // 100 million for testnet
+            100_000_000 * 1e18, // 100 million for testnet
+            0,                  // forkId = 0 for original
+            address(0)          // parentFork = address(0) for original
         );
         console.log("KAIToken:", address(kaiToken));
 
