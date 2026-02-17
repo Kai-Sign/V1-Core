@@ -49,12 +49,8 @@ contract WorkflowTests is Test {
         vm.deal(revoker, 100 ether);
 
         vm.startPrank(owner);
-        address[] memory attesters = new address[](2);
-        attesters[0] = specProvider;
-        attesters[1] = revoker;
-
         registry = new KaiSignRegistry(
-            1, address(0), owner, attesters,
+            1, address(0), owner,
             REALITY_ETH_SEPOLIA, NO_ARBITRATOR, MIN_BOND
         );
         vm.stopPrank();

@@ -54,11 +54,8 @@ contract SecurityTests is Test {
         testChainId = 1;
 
         vm.startPrank(owner);
-        address[] memory attesters = new address[](1);
-        attesters[0] = attester;
-
         registry = new KaiSignRegistry(
-            1, address(0), owner, attesters,
+            1, address(0), owner,
             REALITY_ETH_SEPOLIA, NO_ARBITRATOR, MIN_BOND
         );
         vm.stopPrank();
@@ -72,18 +69,6 @@ contract SecurityTests is Test {
         vm.prank(attacker);
         vm.expectRevert();
         registry.setMinBond(1 ether);
-    }
-
-    function test_AccessControl_OnlyOwner_AddAttester() public {
-        vm.prank(attacker);
-        vm.expectRevert();
-        registry.addAttester(attacker);
-    }
-
-    function test_AccessControl_OnlyOwner_RemoveAttester() public {
-        vm.prank(attacker);
-        vm.expectRevert();
-        registry.removeAttester(attester);
     }
 
     function test_AccessControl_OnlyOwner_Pause() public {
@@ -105,12 +90,6 @@ contract SecurityTests is Test {
         vm.prank(attacker);
         vm.expectRevert();
         registry.setBondToken(address(1), address(2));
-    }
-
-    function test_AccessControl_OnlyOwner_SetIncentivePool() public {
-        vm.prank(attacker);
-        vm.expectRevert();
-        registry.setIncentivePool(address(1));
     }
 
     // ========== INPUT VALIDATION TESTS ==========

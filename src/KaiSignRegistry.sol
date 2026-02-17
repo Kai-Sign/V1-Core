@@ -26,12 +26,10 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     using SafeERC20 for IERC20;
 
     // ========== CUSTOM ERRORS ==========
-    error NotAttester();
     error UseRevealSpecToken();
     error UseRevealSpecETH();
     error UseProposeRevokeToken();
     error UseProposeRevokeETH();
-    error AlreadyAttester();
     error AttestationNotFound();
     error AlreadyRevoked();
     error InvalidExtcodehash();
@@ -51,7 +49,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     error EmptyMetadataHash();
 
     // ========== CONSTANTS ==========
-    string public constant VERSION = "2.0.0";
+    string public constant VERSION = "1.0.0";
     uint32 public constant DEFAULT_TIMEOUT = 48 hours;
     bytes32 public constant LEAF_TYPEHASH =
         keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,uint256 idx,bool revoked)");
@@ -71,10 +69,6 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     IERC20 public bondToken;                       // address(0) = ETH mode, otherwise bToken mode
     mapping(bytes32 => bytes32) public questionIds;        // uid => Reality.eth questionId
     mapping(bytes32 => bytes32) public revokeQuestionIds;  // uid => Reality.eth questionId for revoke
-
-    // ========== ATTESTER ALLOWLIST ==========
-    mapping(address => bool) private _isAttester;
-    address[] private _attesters;
 
     // ========== INDEX FOR MERKLE ORDERING ==========
     uint64 public override currentIdx;
@@ -99,11 +93,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     bytes32 public override merkleRoot;
     uint64 public override merkleRootIdx;
 
-    // ========== ECONOMICS INTEGRATION ==========
-    address public incentivePool;
-
     // ========== EVENTS ==========
-    event IncentivePoolSet(address indexed incentivePool);
     event BondTokenSet(address indexed token, address indexed realityERC20);
     event RegistryForked(uint256 indexed newUniverseId, address indexed newRegistry, bytes32 stateRoot);
     event QuestionCreated(bytes32 indexed uid, bytes32 indexed questionId, uint256 bond);
@@ -123,18 +113,11 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         bytes32 extcodehash
     );
 
-    // ========== MODIFIERS ==========
-    modifier onlyAttester() {
-        if (!_isAttester[msg.sender]) revert NotAttester();
-        _;
-    }
-
     // ========== CONSTRUCTOR ==========
     constructor(
         uint256 _universeId,
         address _parentRegistry,
         address _initialOwner,
-        address[] memory _initialAttesters,
         address _realityETH,
         address _arbitrator,
         uint256 _minBond
@@ -156,58 +139,6 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         if (_initialOwner != msg.sender) {
             _transferOwnership(_initialOwner);
         }
-
-        for (uint256 i = 0; i < _initialAttesters.length; i++) {
-            address attester = _initialAttesters[i];
-            if (attester != address(0) && !_isAttester[attester]) {
-                _isAttester[attester] = true;
-                _attesters.push(attester);
-                emit AttesterAdded(attester);
-            }
-        }
-    }
-
-    // ========== ATTESTER MANAGEMENT (Owner only) ==========
-
-    function addAttester(address attester) external onlyOwner {
-        if (attester == address(0)) revert InvalidExtcodehash();
-        if (_isAttester[attester]) revert AlreadyAttester();
-
-        _isAttester[attester] = true;
-        _attesters.push(attester);
-
-        emit AttesterAdded(attester);
-    }
-
-    function removeAttester(address attester) external onlyOwner {
-        if (!_isAttester[attester]) revert NotAttester();
-
-        _isAttester[attester] = false;
-
-        emit AttesterRemoved(attester);
-    }
-
-    function isAttester(address account) external view override returns (bool) {
-        return _isAttester[account];
-    }
-
-    function getAttesters() external view override returns (address[] memory) {
-        uint256 activeCount = 0;
-        for (uint256 i = 0; i < _attesters.length; i++) {
-            if (_isAttester[_attesters[i]]) {
-                activeCount++;
-            }
-        }
-
-        address[] memory active = new address[](activeCount);
-        uint256 j = 0;
-        for (uint256 i = 0; i < _attesters.length; i++) {
-            if (_isAttester[_attesters[i]]) {
-                active[j++] = _attesters[i];
-            }
-        }
-
-        return active;
     }
 
     // ========== COMMIT-REVEAL FOR SPEC SUBMISSION ==========
@@ -384,7 +315,8 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
             idx: 0,  // Will be assigned on finalization if approved
             revoked: false,
             finalizedAt: 0,
-            revokeProposedAt: 0
+            revokeProposedAt: 0,
+            revokeProposer: address(0)
         });
 
         emit LogRevealSpec(
@@ -477,14 +409,6 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
             merkleRoot = newMerkleRoot;
             merkleRootIdx = att.idx;
 
-            // Pay proposer incentives
-            if (incentivePool != address(0)) {
-                (bool success, ) = incentivePool.call(
-                    abi.encodeWithSignature("claimPool(bytes32,bytes32,address)", att.extcodehash, uid, att.attester)
-                );
-                // Don't revert if no incentives
-            }
-
             emit SpecIndexed(uid, att.chainId, att.extcodehash, att.blobHash, att.attester, idx);
         } else {
             // REJECTED: Mark as revoked, do NOT index
@@ -568,6 +492,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         if (att.revokeProposedAt != 0) revert RevokeAlreadyProposed();
 
         att.revokeProposedAt = uint64(block.timestamp);
+        att.revokeProposer = msg.sender;
     }
 
     function _buildRevokeQuestionParams(bytes32 uid) internal view returns (string memory) {
@@ -612,6 +537,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         } else {
             // Revoke rejected - reset proposal
             att.revokeProposedAt = 0;
+            att.revokeProposer = address(0);
             emit RevokeFinalized(uid, false);
         }
     }
@@ -724,11 +650,6 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
 
     // ========== ECONOMICS INTEGRATION ==========
 
-    function setIncentivePool(address _incentivePool) external onlyOwner {
-        incentivePool = _incentivePool;
-        emit IncentivePoolSet(_incentivePool);
-    }
-
     /**
      * @notice Transition to Phase 2 (bToken mode)
      * @param _bondToken The bToken address
@@ -752,6 +673,10 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
 
     function getAttestation(bytes32 uid) external view override returns (Attestation memory) {
         return _attestations[uid];
+    }
+
+    function revokeProposers(bytes32 uid) external view returns (address) {
+        return _attestations[uid].revokeProposer;
     }
 
     function getSpecsForBytecode(uint256 chainId, bytes32 extcodehash) external view returns (bytes32[] memory) {
