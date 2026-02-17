@@ -20,6 +20,7 @@ interface IKaiSignRegistry {
         bool revoked;               // Whether this attestation is revoked
         uint64 finalizedAt;         // When finalized (0 = not finalized)
         uint64 revokeProposedAt;    // When revoke was proposed (0 = no proposal)
+        address revokeProposer;     // Who proposed the revoke (for incentive claims)
     }
 
     // ========== EVENTS ==========
@@ -48,8 +49,6 @@ interface IKaiSignRegistry {
         bool revoked
     );
 
-    event AttesterAdded(address indexed attester);
-    event AttesterRemoved(address indexed attester);
     event MerkleRootUpdated(bytes32 indexed newRoot, uint64 atIdx);
 
     // ========== COMMIT-REVEAL ==========
@@ -102,7 +101,6 @@ interface IKaiSignRegistry {
     function universeId() external view returns (uint256);
     function parentRegistry() external view returns (address);
 
-    // ========== ATTESTER MANAGEMENT ==========
-    function isAttester(address account) external view returns (bool);
-    function getAttesters() external view returns (address[] memory);
+    // ========== REVOKE PROPOSER ==========
+    function revokeProposers(bytes32 uid) external view returns (address);
 }

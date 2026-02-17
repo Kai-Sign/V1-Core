@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/access/Ownable2Step.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IKaiSignRegistry} from "../interfaces/IKaiSignRegistry.sol";
 
 /**
  * @title IncentivePool
@@ -30,6 +31,11 @@ contract IncentivePool is Ownable2Step, ReentrancyGuard {
     error TransferFailed();
     error UseCreateIncentiveToken();
     error UseCreateIncentiveETH();
+    error NotFinalized();
+    error NotApproved();
+    error AlreadyClaimed();
+    error NotRevoked();
+    error NoRevokeReward();
 
     // ========== CONSTANTS ==========
     uint256 public constant PLATFORM_FEE_PERCENT = 5;
@@ -58,6 +64,11 @@ contract IncentivePool is Ownable2Step, ReentrancyGuard {
     mapping(bytes32 => uint256) public contributorCount;      // extcodehash => count
     mapping(address => bytes32[]) public userIncentives;
 
+    // Pull model: track claimed UIDs
+    mapping(bytes32 => bool) public claimedUids;              // uid => claimed for spec
+    mapping(bytes32 => bool) public claimedRevokeUids;        // uid => claimed for revoke
+    mapping(bytes32 => uint256) public revokeRewardPool;      // extcodehash => revoke reward pool
+
     // ========== EVENTS ==========
     event IncentiveCreated(
         bytes32 indexed incentiveId,
@@ -80,6 +91,23 @@ contract IncentivePool is Ownable2Step, ReentrancyGuard {
         uint256 amount
     );
     event IncentiveTokenSet(address indexed token);
+    event SpecRewardClaimed(
+        bytes32 indexed uid,
+        address indexed claimer,
+        bytes32 indexed extcodehash,
+        uint256 amount
+    );
+    event RevokeRewardClaimed(
+        bytes32 indexed uid,
+        address indexed claimer,
+        bytes32 indexed extcodehash,
+        uint256 amount
+    );
+    event RevokeRewardDeposited(
+        bytes32 indexed extcodehash,
+        address indexed depositor,
+        uint256 amount
+    );
 
     // ========== CONSTRUCTOR ==========
     /**
@@ -257,66 +285,92 @@ contract IncentivePool is Ownable2Step, ReentrancyGuard {
         }
     }
 
-    // ========== INCENTIVE CLAIMING ==========
+    // ========== PULL MODEL: SPEC REWARD CLAIMING ==========
 
     /**
-     * @notice Claim incentive pool for a bytecode
-     * @dev Called by registry when attestation is accepted
-     * @param extcodehash The bytecode hash
+     * @notice Claim spec reward for an approved attestation (pull model)
+     * @dev Reads attestation state from registry - can be batched with finalize()
      * @param uid The attestation UID
-     * @param claimer Who receives the reward (spec creator)
      */
-    function claimPool(
-        bytes32 extcodehash,
-        bytes32 uid,
-        address claimer
-    ) external nonReentrant {
-        if (msg.sender != registry) revert Unauthorized();
+    function claimForSpec(bytes32 uid) external nonReentrant {
+        if (claimedUids[uid]) revert AlreadyClaimed();
 
-        uint256 poolAmount = poolByBytecode[extcodehash];
+        IKaiSignRegistry.Attestation memory att = IKaiSignRegistry(registry).getAttestation(uid);
+
+        if (att.finalizedAt == 0) revert NotFinalized();
+        if (att.revoked) revert NotApproved();
+
+        claimedUids[uid] = true;
+
+        uint256 poolAmount = poolByBytecode[att.extcodehash];
         if (poolAmount == 0) return;
 
-        poolByBytecode[extcodehash] = 0;
+        poolByBytecode[att.extcodehash] = 0;
 
         bool isToken = address(incentiveToken) != address(0);
-        _transferWithFee(poolAmount, claimer, isToken);
+        _transferWithFee(poolAmount, att.attester, isToken);
 
         (, uint256 claimerAmount) = _calculateFees(poolAmount);
-        emit IncentiveClaimed(bytes32(0), claimer, uid, claimerAmount);
+        emit SpecRewardClaimed(uid, att.attester, att.extcodehash, claimerAmount);
+    }
+
+    // ========== PULL MODEL: REVOKE REWARD CLAIMING ==========
+
+    /**
+     * @notice Deposit ETH to revoke reward pool for a bytecode
+     * @param extcodehash Target contract bytecode hash
+     */
+    function depositRevokeRewardETH(bytes32 extcodehash) external payable nonReentrant {
+        if (address(incentiveToken) != address(0)) revert UseCreateIncentiveToken();
+        if (extcodehash == bytes32(0)) revert InvalidBytecode();
+        if (msg.value == 0) revert NoValue();
+
+        revokeRewardPool[extcodehash] += msg.value;
+        emit RevokeRewardDeposited(extcodehash, msg.sender, msg.value);
     }
 
     /**
-     * @notice Claim a specific incentive
-     * @dev Called by registry when attestation for specific incentive is accepted
-     * @param incentiveId The incentive ID
-     * @param uid The attestation UID
-     * @param claimer Who receives the reward
+     * @notice Deposit tokens to revoke reward pool for a bytecode
+     * @param extcodehash Target contract bytecode hash
+     * @param amount Amount of tokens
      */
-    function claimIncentive(
-        bytes32 incentiveId,
-        bytes32 uid,
-        address claimer
-    ) external nonReentrant {
-        if (msg.sender != registry) revert Unauthorized();
+    function depositRevokeRewardToken(bytes32 extcodehash, uint256 amount) external nonReentrant {
+        if (address(incentiveToken) == address(0)) revert UseCreateIncentiveETH();
+        if (extcodehash == bytes32(0)) revert InvalidBytecode();
+        if (amount == 0) revert NoValue();
 
-        Incentive storage incentive = incentives[incentiveId];
+        incentiveToken.safeTransferFrom(msg.sender, address(this), amount);
+        revokeRewardPool[extcodehash] += amount;
+        emit RevokeRewardDeposited(extcodehash, msg.sender, amount);
+    }
 
-        if (incentive.isClaimed || !incentive.isActive) revert NotClaimable();
-        if (block.timestamp > incentive.deadline) revert NotClaimable();
+    /**
+     * @notice Claim revoke reward for a successful revocation (pull model)
+     * @dev Reads attestation state from registry - can be batched with finalizeRevoke()
+     * @param uid The attestation UID that was revoked
+     */
+    function claimRevokeReward(bytes32 uid) external nonReentrant {
+        if (claimedRevokeUids[uid]) revert AlreadyClaimed();
 
-        incentive.isClaimed = true;
-        incentive.isActive = false;
+        IKaiSignRegistry.Attestation memory att = IKaiSignRegistry(registry).getAttestation(uid);
 
-        uint256 amount = incentive.amount;
+        if (!att.revoked) revert NotRevoked();
 
-        // Update pool
-        poolByBytecode[incentive.extcodehash] -= amount;
-        contributorCount[incentive.extcodehash]--;
+        address revoker = IKaiSignRegistry(registry).revokeProposers(uid);
+        if (revoker == address(0)) revert NoRevokeReward();
 
-        _transferWithFee(amount, claimer, incentive.isToken);
+        claimedRevokeUids[uid] = true;
 
-        (, uint256 claimerAmount) = _calculateFees(amount);
-        emit IncentiveClaimed(incentiveId, claimer, uid, claimerAmount);
+        uint256 rewardAmount = revokeRewardPool[att.extcodehash];
+        if (rewardAmount == 0) return;
+
+        revokeRewardPool[att.extcodehash] = 0;
+
+        bool isToken = address(incentiveToken) != address(0);
+        _transferWithFee(rewardAmount, revoker, isToken);
+
+        (, uint256 claimerAmount) = _calculateFees(rewardAmount);
+        emit RevokeRewardClaimed(uid, revoker, att.extcodehash, claimerAmount);
     }
 
     // ========== CLAWBACK ==========
@@ -356,6 +410,15 @@ contract IncentivePool is Ownable2Step, ReentrancyGuard {
      */
     function getPool(bytes32 extcodehash) external view returns (uint256 amount, uint256 count) {
         return (poolByBytecode[extcodehash], contributorCount[extcodehash]);
+    }
+
+    /**
+     * @notice Get revoke reward pool for a bytecode
+     * @param extcodehash Bytecode hash
+     * @return amount Revoke reward pool amount
+     */
+    function getRevokeRewardPool(bytes32 extcodehash) external view returns (uint256 amount) {
+        return revokeRewardPool[extcodehash];
     }
 
     /**

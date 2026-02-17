@@ -84,20 +84,14 @@ contract RealityEthForkTest is Test {
 
         // Deploy KaiSignRegistry connected to real Reality.eth
         vm.startPrank(deployer);
-
-        address[] memory attesters = new address[](1);
-        attesters[0] = proposer;
-
         registry = new KaiSignRegistry(
             1,                    // universeId
             address(0),           // parentRegistry (none)
             deployer,             // initialOwner
-            attesters,            // initialAttesters
             REALITY_ETH,          // Reality.eth v3.0
             NO_ARBITRATOR,        // no arbitrator - faster finalization
             MIN_BOND              // minBond
         );
-
         vm.stopPrank();
 
         // Get Reality.eth interface

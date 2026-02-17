@@ -50,14 +50,10 @@ contract KaiSignRegistryTest is Test {
 
         // Deploy registry
         vm.startPrank(owner);
-        address[] memory attesters = new address[](1);
-        attesters[0] = attester1;
-
         registry = new KaiSignRegistry(
             1,                    // universeId
             address(0),           // parentRegistry
             owner,                // initialOwner
-            attesters,            // initialAttesters
             REALITY_ETH_SEPOLIA,  // realityETH
             NO_ARBITRATOR,        // arbitrator
             MIN_BOND              // minBond
@@ -79,12 +75,9 @@ contract KaiSignRegistryTest is Test {
 
     function test_Constructor_InvalidRealityETH() public {
         vm.prank(owner);
-        address[] memory attesters = new address[](1);
-        attesters[0] = attester1;
-
         vm.expectRevert("Invalid Reality.eth");
         new KaiSignRegistry(
-            1, address(0), owner, attesters,
+            1, address(0), owner,
             address(0),  // Invalid Reality.eth
             NO_ARBITRATOR, MIN_BOND
         );
@@ -92,62 +85,6 @@ contract KaiSignRegistryTest is Test {
 
     // Note: Contract does not validate zero minBond - this is by design
     // Owner can set minBond to any value including zero
-
-    // ========== ATTESTER MANAGEMENT TESTS ==========
-
-    function test_AddAttester() public {
-        assertFalse(registry.isAttester(attester2));
-
-        vm.prank(owner);
-        registry.addAttester(attester2);
-
-        assertTrue(registry.isAttester(attester2));
-    }
-
-    function test_AddAttester_OnlyOwner() public {
-        vm.prank(nonAttester);
-        vm.expectRevert();
-        registry.addAttester(attester2);
-    }
-
-    function test_AddAttester_AlreadyAttester() public {
-        vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSignature("AlreadyAttester()"));
-        registry.addAttester(attester1);
-    }
-
-    function test_RemoveAttester() public {
-        assertTrue(registry.isAttester(attester1));
-
-        vm.prank(owner);
-        registry.removeAttester(attester1);
-
-        assertFalse(registry.isAttester(attester1));
-    }
-
-    function test_RemoveAttester_OnlyOwner() public {
-        vm.prank(nonAttester);
-        vm.expectRevert();
-        registry.removeAttester(attester1);
-    }
-
-    function test_RemoveAttester_NotAttester() public {
-        vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSignature("NotAttester()"));
-        registry.removeAttester(attester2);
-    }
-
-    function test_GetAttesters() public {
-        address[] memory attesters = registry.getAttesters();
-        assertEq(attesters.length, 1);
-        assertEq(attesters[0], attester1);
-
-        vm.prank(owner);
-        registry.addAttester(attester2);
-
-        attesters = registry.getAttesters();
-        assertEq(attesters.length, 2);
-    }
 
     // ========== SET MIN BOND TESTS ==========
 
