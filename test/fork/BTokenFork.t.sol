@@ -47,6 +47,10 @@ contract BTokenForkTest is Test {
     bytes32 constant LEAF_TYPEHASH =
         keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,uint256 idx,bool revoked)");
 
+    // ========== EVENTS ==========
+
+    event BondTokenSet(address indexed token, address indexed realityERC20);
+
     // ========== STATE ==========
 
     KaiSignRegistry public registry;
@@ -102,20 +106,14 @@ contract BTokenForkTest is Test {
 
         // Deploy KaiSignRegistry in ETH mode
         vm.startPrank(deployer);
-
-        address[] memory attesters = new address[](1);
-        attesters[0] = proposer;
-
         registry = new KaiSignRegistry(
             1,                          // universeId
             address(0),                 // parentRegistry (none)
             deployer,                   // initialOwner
-            attesters,                  // initialAttesters
             REALITY_ETH_SEPOLIA,        // Reality.eth v3.0
             NO_ARBITRATOR,              // no arbitrator
             MIN_BOND                    // minBond
         );
-
         vm.stopPrank();
 
         realityETH = IRealityETH(REALITY_ETH_SEPOLIA);
@@ -213,6 +211,65 @@ contract BTokenForkTest is Test {
         registry.setBondToken(address(bToken), address(0));
 
         console.log("Invalid params correctly rejected!");
+    }
+
+    function test_SetBondToken_CanChangeToken() public {
+        console.log("\n=== Test: setBondToken Can Change Token ===\n");
+
+        // First activation
+        vm.prank(deployer);
+        registry.setBondToken(address(bToken), REALITY_ETH_ERC20_SEPOLIA);
+        assertEq(address(registry.bondToken()), address(bToken), "First token should be set");
+
+        // Deploy second token
+        vm.prank(deployer);
+        MockBToken bToken2 = new MockBToken();
+
+        // Change to second token
+        vm.prank(deployer);
+        registry.setBondToken(address(bToken2), REALITY_ETH_ERC20_SEPOLIA);
+
+        assertEq(address(registry.bondToken()), address(bToken2), "Should be changed to second token");
+        console.log("bToken successfully changed!");
+    }
+
+    function test_SetBondToken_CanChangeRealityETH() public {
+        console.log("\n=== Test: setBondToken Can Change Reality.eth ===\n");
+
+        // First activation
+        vm.prank(deployer);
+        registry.setBondToken(address(bToken), REALITY_ETH_ERC20_SEPOLIA);
+        assertEq(address(registry.realityETH_ERC20()), REALITY_ETH_ERC20_SEPOLIA, "First Reality.eth should be set");
+
+        address newRealityETH = makeAddr("newRealityETH");
+
+        // Change Reality.eth address
+        vm.prank(deployer);
+        registry.setBondToken(address(bToken), newRealityETH);
+
+        assertEq(address(registry.realityETH_ERC20()), newRealityETH, "Reality.eth should be changed");
+        console.log("Reality.eth ERC20 successfully changed!");
+    }
+
+    function test_SetBondToken_EmitsEventOnChange() public {
+        console.log("\n=== Test: setBondToken Emits Event On Change ===\n");
+
+        // First activation
+        vm.prank(deployer);
+        registry.setBondToken(address(bToken), REALITY_ETH_ERC20_SEPOLIA);
+
+        // Deploy second token
+        vm.prank(deployer);
+        MockBToken bToken2 = new MockBToken();
+
+        // Expect event on change
+        vm.expectEmit(true, true, false, false);
+        emit BondTokenSet(address(bToken2), REALITY_ETH_ERC20_SEPOLIA);
+
+        vm.prank(deployer);
+        registry.setBondToken(address(bToken2), REALITY_ETH_ERC20_SEPOLIA);
+
+        console.log("Event emitted on token change!");
     }
 
     // ========== TEST: revealSpecToken ==========
@@ -359,14 +416,10 @@ contract BTokenForkTest is Test {
 
         // Deploy child registry (universe 2) with parent
         vm.startPrank(deployer);
-        address[] memory attesters = new address[](1);
-        attesters[0] = proposer;
-
         KaiSignRegistry childRegistry = new KaiSignRegistry(
             2,                          // universeId = 2
             address(registry),          // parentRegistry = first registry
             deployer,
-            attesters,
             REALITY_ETH_SEPOLIA,
             NO_ARBITRATOR,
             MIN_BOND
