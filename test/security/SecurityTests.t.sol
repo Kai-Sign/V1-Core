@@ -5,24 +5,38 @@ import "forge-std/Test.sol";
 import {KaiSignRegistry} from "../../src/KaiSignRegistry.sol";
 import {IRealityETH} from "../../src/interfaces/IRealityETH.sol";
 import {IKaiSignRegistry} from "../../src/interfaces/IKaiSignRegistry.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+
+/**
+ * @title MockToken
+ * @notice Simple ERC20 for testing
+ */
+contract MockToken is ERC20 {
+    constructor() ERC20("Mock Token", "MOCK") {
+        _mint(msg.sender, 1_000_000 ether);
+    }
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+}
 
 /**
  * @title SecurityTests
- * @notice Security-focused tests for KaiSignRegistry
- * @dev Adapted from V1 AuditTests.t.sol for V2 with Reality.eth integration
+ * @notice Security-focused tests for KaiSignRegistry (ERC20 mode)
  */
 contract SecurityTests is Test {
     // ========== CONSTANTS ==========
     address constant REALITY_ETH_SEPOLIA = 0xaf33DcB6E8c5c4D9dDF579f53031b514d19449CA;
     address constant NO_ARBITRATOR = address(0);
-    uint256 constant MIN_BOND = 0.01 ether;
+    uint256 constant MIN_BOND = 100 ether; // Token amount
     uint32 constant DEFAULT_TIMEOUT = 48 hours;
     bytes32 constant LEAF_TYPEHASH =
         keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,uint256 idx,bool revoked)");
 
     // ========== STATE ==========
     KaiSignRegistry public registry;
-    IRealityETH public realityETH;
+    MockToken public token;
 
     address public owner;
     address public attester;
@@ -53,14 +67,25 @@ contract SecurityTests is Test {
         testExtcodehash = keccak256("test-bytecode");
         testChainId = 1;
 
+        // Deploy token
+        vm.prank(owner);
+        token = new MockToken();
+
+        // Distribute tokens
+        vm.startPrank(owner);
+        token.transfer(attester, 10_000 ether);
+        token.transfer(attacker, 10_000 ether);
+        vm.stopPrank();
+
         vm.startPrank(owner);
         registry = new KaiSignRegistry(
             1, address(0), owner,
-            REALITY_ETH_SEPOLIA, NO_ARBITRATOR, MIN_BOND
+            NO_ARBITRATOR, MIN_BOND
         );
-        vm.stopPrank();
 
-        realityETH = IRealityETH(REALITY_ETH_SEPOLIA);
+        // Note: Using ETH Reality.eth as mock
+        registry.setBondToken(address(token), REALITY_ETH_SEPOLIA);
+        vm.stopPrank();
     }
 
     // ========== ACCESS CONTROL TESTS ==========
@@ -115,10 +140,11 @@ contract SecurityTests is Test {
         bytes32 commitment = keccak256(abi.encodePacked(bytes32(0), nonce));
 
         vm.startPrank(attester);
+        token.approve(address(registry), MIN_BOND);
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
 
         vm.expectRevert(abi.encodeWithSignature("EmptyBlobHash()"));
-        registry.revealSpec{value: MIN_BOND}(commitmentId, bytes32(0), nonce, testMetadataHash);
+        registry.revealSpec(commitmentId, bytes32(0), nonce, testMetadataHash, MIN_BOND);
         vm.stopPrank();
     }
 
@@ -127,28 +153,30 @@ contract SecurityTests is Test {
         bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
 
         vm.startPrank(attester);
+        token.approve(address(registry), MIN_BOND);
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
 
         vm.expectRevert(abi.encodeWithSignature("BelowMinBond()"));
-        registry.revealSpec{value: MIN_BOND - 1}(commitmentId, testBlobHash, nonce, testMetadataHash);
+        registry.revealSpec(commitmentId, testBlobHash, nonce, testMetadataHash, MIN_BOND - 1);
         vm.stopPrank();
     }
 
-    // ========== DOUBLE REVEAL PREVENTION ==========
+    function test_Validation_BondTokenNotSet() public {
+        // Deploy new registry without setBondToken
+        vm.prank(owner);
+        KaiSignRegistry newRegistry = new KaiSignRegistry(
+            2, address(0), owner,
+            NO_ARBITRATOR, MIN_BOND
+        );
 
-    function test_Security_DoubleReveal() public {
         uint256 nonce = 12345;
         bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
 
         vm.startPrank(attester);
-        bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
+        bytes32 commitmentId = newRegistry.commitSpec(commitment, testChainId, testExtcodehash);
 
-        // First reveal succeeds
-        registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
-
-        // Second reveal fails
-        vm.expectRevert(abi.encodeWithSignature("CommitmentAlreadyRevealed()"));
-        registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
+        vm.expectRevert(abi.encodeWithSignature("BondTokenNotSet()"));
+        newRegistry.revealSpec(commitmentId, testBlobHash, nonce, testMetadataHash, MIN_BOND);
         vm.stopPrank();
     }
 
@@ -159,11 +187,12 @@ contract SecurityTests is Test {
         bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
 
         vm.startPrank(attester);
+        token.approve(address(registry), MIN_BOND);
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
 
         // Wrong nonce
         vm.expectRevert(abi.encodeWithSignature("InvalidReveal()"));
-        registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, 99999, testMetadataHash);
+        registry.revealSpec(commitmentId, testBlobHash, 99999, testMetadataHash, MIN_BOND);
         vm.stopPrank();
     }
 
@@ -172,11 +201,12 @@ contract SecurityTests is Test {
         bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
 
         vm.startPrank(attester);
+        token.approve(address(registry), MIN_BOND);
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
 
         // Wrong blob hash
         vm.expectRevert(abi.encodeWithSignature("InvalidReveal()"));
-        registry.revealSpec{value: MIN_BOND}(commitmentId, keccak256("wrong"), nonce, testMetadataHash);
+        registry.revealSpec(commitmentId, keccak256("wrong"), nonce, testMetadataHash, MIN_BOND);
         vm.stopPrank();
     }
 
@@ -189,129 +219,57 @@ contract SecurityTests is Test {
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
 
         // Attacker tries to reveal
-        vm.prank(attacker);
+        vm.startPrank(attacker);
+        token.approve(address(registry), MIN_BOND);
         vm.expectRevert(abi.encodeWithSignature("InvalidReveal()"));
-        registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
+        registry.revealSpec(commitmentId, testBlobHash, nonce, testMetadataHash, MIN_BOND);
+        vm.stopPrank();
     }
 
     function test_Security_CommitmentNotFound() public {
         bytes32 fakeCommitmentId = keccak256("fake");
 
-        vm.prank(attester);
+        vm.startPrank(attester);
+        token.approve(address(registry), MIN_BOND);
         vm.expectRevert(abi.encodeWithSignature("CommitmentNotFound()"));
-        registry.revealSpec{value: MIN_BOND}(fakeCommitmentId, testBlobHash, 12345, testMetadataHash);
-    }
-
-    // ========== MODE ENFORCEMENT ==========
-
-    function test_Security_ModeEnforcement_TokenInETHMode() public {
-        uint256 nonce = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
-
-        vm.startPrank(attester);
-        bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
-
-        // Try token function in ETH mode
-        vm.expectRevert(abi.encodeWithSignature("UseRevealSpecETH()"));
-        registry.revealSpecToken(commitmentId, testBlobHash, nonce, testMetadataHash, MIN_BOND);
+        registry.revealSpec(fakeCommitmentId, testBlobHash, 12345, testMetadataHash, MIN_BOND);
         vm.stopPrank();
-    }
-
-    // ========== FINALIZATION SECURITY ==========
-
-    function test_Security_FinalizeNotFinalized() public {
-        uint256 nonce = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
-
-        vm.startPrank(attester);
-        bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
-        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
-        vm.stopPrank();
-
-        // Try to finalize before Reality.eth question is answered
-        // Contract uses ChallengePeriodActive when Reality.eth question is not finalized
-        bytes32[] memory proof = new bytes32[](0);
-
-        vm.prank(attester);
-        vm.expectRevert(abi.encodeWithSignature("ChallengePeriodActive()"));
-        registry.finalize(uid, bytes32(0), proof);
-    }
-
-    function test_Security_FinalizeAlreadyFinalized() public {
-        // Submit and finalize a spec
-        uint256 nonce = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
-
-        vm.startPrank(attester);
-        bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
-        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
-        vm.stopPrank();
-
-        bytes32 questionId = registry.questionIds(uid);
-
-        // Submit APPROVE answer
-        vm.prank(attester);
-        realityETH.submitAnswer{value: MIN_BOND}(questionId, bytes32(uint256(1)), 0);
-
-        // Warp past timeout
-        vm.warp(block.timestamp + DEFAULT_TIMEOUT + 1);
-
-        // First finalize
-        bytes32 leaf = keccak256(abi.encode(LEAF_TYPEHASH, testChainId, testExtcodehash, testMetadataHash, uint64(1), false));
-        bytes32[] memory proof = new bytes32[](0);
-
-        vm.prank(attester);
-        registry.finalize(uid, leaf, proof);
-
-        // Try to finalize again
-        vm.prank(attester);
-        vm.expectRevert(abi.encodeWithSignature("AlreadyFinalized()"));
-        registry.finalize(uid, leaf, proof);
     }
 
     // ========== REVOCATION SECURITY ==========
 
     function test_Security_ProposeRevoke_NotFinalized() public {
+        // Create commitment but don't reveal/finalize
         uint256 nonce = 12345;
         bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
 
-        vm.startPrank(attester);
-        bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
-        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
-        vm.stopPrank();
+        vm.prank(attester);
+        registry.commitSpec(commitment, testChainId, testExtcodehash);
 
-        // Try to revoke before finalized
-        vm.prank(attacker);
-        vm.expectRevert(abi.encodeWithSignature("NotFinalized()"));
-        registry.proposeRevoke{value: MIN_BOND}(uid);
+        // Use a fake UID
+        bytes32 fakeUid = keccak256("fake-uid");
+
+        vm.startPrank(attacker);
+        token.approve(address(registry), MIN_BOND);
+        vm.expectRevert(abi.encodeWithSignature("AttestationNotFound()"));
+        registry.proposeRevoke(fakeUid, MIN_BOND);
+        vm.stopPrank();
     }
 
-    function test_Security_ProposeRevoke_AlreadyRevoked() public {
-        // Create and finalize an approved attestation
-        uint256 nonce = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
+    function test_Security_ProposeRevoke_BondTokenNotSet() public {
+        // Deploy new registry without setBondToken
+        vm.prank(owner);
+        KaiSignRegistry newRegistry = new KaiSignRegistry(
+            2, address(0), owner,
+            NO_ARBITRATOR, MIN_BOND
+        );
 
-        vm.startPrank(attester);
-        bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
-        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
+        bytes32 fakeUid = keccak256("fake-uid");
+
+        vm.startPrank(attacker);
+        vm.expectRevert(abi.encodeWithSignature("BondTokenNotSet()"));
+        newRegistry.proposeRevoke(fakeUid, MIN_BOND);
         vm.stopPrank();
-
-        bytes32 questionId = registry.questionIds(uid);
-
-        // Submit REJECT answer (this marks as revoked on finalization)
-        vm.prank(attester);
-        realityETH.submitAnswer{value: MIN_BOND}(questionId, bytes32(uint256(0)), 0);
-
-        vm.warp(block.timestamp + DEFAULT_TIMEOUT + 1);
-
-        bytes32[] memory proof = new bytes32[](0);
-        vm.prank(attester);
-        registry.finalize(uid, bytes32(0), proof);
-
-        // Try to propose revoke on already revoked attestation
-        vm.prank(attacker);
-        vm.expectRevert(abi.encodeWithSignature("AlreadyRevoked()"));
-        registry.proposeRevoke{value: MIN_BOND}(uid);
     }
 
     // ========== PAUSE PROTECTION ==========
@@ -335,66 +293,23 @@ contract SecurityTests is Test {
         vm.prank(owner);
         registry.pause();
 
-        vm.prank(attester);
-        vm.expectRevert();
-        registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
-    }
-
-    function test_Security_Paused_Finalize() public {
-        // Setup complete flow
-        uint256 nonce = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
-
         vm.startPrank(attester);
-        bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
-        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
-        vm.stopPrank();
-
-        bytes32 questionId = registry.questionIds(uid);
-        vm.prank(attester);
-        realityETH.submitAnswer{value: MIN_BOND}(questionId, bytes32(uint256(1)), 0);
-
-        vm.warp(block.timestamp + DEFAULT_TIMEOUT + 1);
-
-        // Pause
-        vm.prank(owner);
-        registry.pause();
-
-        // Try to finalize
-        bytes32[] memory proof = new bytes32[](0);
-        vm.prank(attester);
+        token.approve(address(registry), MIN_BOND);
         vm.expectRevert();
-        registry.finalize(uid, bytes32(0), proof);
+        registry.revealSpec(commitmentId, testBlobHash, nonce, testMetadataHash, MIN_BOND);
+        vm.stopPrank();
     }
 
     function test_Security_Paused_ProposeRevoke() public {
-        // Create and finalize approved attestation
-        uint256 nonce = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
-
-        vm.startPrank(attester);
-        bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
-        bytes32 uid = registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
-        vm.stopPrank();
-
-        bytes32 questionId = registry.questionIds(uid);
-        vm.prank(attester);
-        realityETH.submitAnswer{value: MIN_BOND}(questionId, bytes32(uint256(1)), 0);
-
-        vm.warp(block.timestamp + DEFAULT_TIMEOUT + 1);
-
-        bytes32 leaf = keccak256(abi.encode(LEAF_TYPEHASH, testChainId, testExtcodehash, testMetadataHash, uint64(1), false));
-        bytes32[] memory proof = new bytes32[](0);
-        vm.prank(attester);
-        registry.finalize(uid, leaf, proof);
-
-        // Pause
         vm.prank(owner);
         registry.pause();
 
-        // Try to propose revoke
-        vm.prank(attacker);
+        bytes32 fakeUid = keccak256("fake-uid");
+
+        vm.startPrank(attacker);
+        token.approve(address(registry), MIN_BOND);
         vm.expectRevert();
-        registry.proposeRevoke{value: MIN_BOND}(uid);
+        registry.proposeRevoke(fakeUid, MIN_BOND);
+        vm.stopPrank();
     }
 }

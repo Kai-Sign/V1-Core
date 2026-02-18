@@ -62,8 +62,9 @@ interface IKaiSignRegistry {
         bytes32 commitmentId,
         bytes32 blobHash,
         uint256 nonce,
-        bytes32 metadataHash
-    ) external payable returns (bytes32 uid);
+        bytes32 metadataHash,
+        uint256 tokenAmount
+    ) external returns (bytes32 uid);
 
     // ========== FINALIZATION ==========
     function finalize(
@@ -73,7 +74,7 @@ interface IKaiSignRegistry {
     ) external;
 
     // ========== REVOCATION ==========
-    function proposeRevoke(bytes32 uid) external payable;
+    function proposeRevoke(bytes32 uid, uint256 tokenAmount) external;
     function finalizeRevoke(bytes32 uid) external;
 
     // ========== MERKLE HELPERS ==========
