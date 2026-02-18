@@ -2,28 +2,35 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "./Whitelistable.sol";
 
 /**
  * @title PermissionedBToken
- * @notice Bond token where only the owner (minter) can transfer tokens
- * @dev Uses OpenZeppelin's _beforeTokenTransfer hook pattern for transfer restrictions
- *      Reference: https://docs.openzeppelin.com/contracts/4.x/api/token/erc20
- *      Forum: https://forum.openzeppelin.com/t/how-to-prevent-erc20-transfer-until-a-specific-block-and-only-allow-the-contract-creator-to-transfer/4236
+ * @notice Bond token with transfer restrictions using Circle/USDC pattern
+ * @dev Based on Circle's Blacklistable pattern (inverted to whitelist)
+ *      https://github.com/circlefin/stablecoin-evm
+ *
+ *      Transfer rules:
+ *      - Owner can transfer to anyone
+ *      - Anyone can transfer TO whitelisted addresses (e.g., Reality.eth)
+ *      - Whitelisted addresses can transfer to anyone (e.g., Reality.eth returning winnings)
+ *      - Other transfers blocked
  */
-contract PermissionedBToken is ERC20, Ownable {
-    error OnlyOwnerCanTransfer();
-
+contract PermissionedBToken is ERC20, Whitelistable {
+    /**
+     * @param _owner Initial owner and whitelister
+     */
     constructor(address _owner) ERC20("Permissioned Bond Token", "pBTOKEN") {
         _transferOwnership(_owner);
+        whitelister = _owner;
     }
 
-    /// @notice Mint tokens to approved participant
+    /// @notice Mint tokens to recipient
     function mint(address to, uint256 amount) external onlyOwner {
         _mint(to, amount);
     }
 
-    /// @notice Batch mint to multiple participants
+    /// @notice Batch mint to multiple recipients
     function batchMint(address[] calldata recipients, uint256 amount) external onlyOwner {
         for (uint256 i = 0; i < recipients.length; i++) {
             _mint(recipients[i], amount);
@@ -31,11 +38,12 @@ contract PermissionedBToken is ERC20, Ownable {
     }
 
     /**
-     * @notice Hook that restricts all transfers to owner only
-     * @dev Called before any transfer including mint/burn
-     *      - from == address(0): minting (allowed, onlyOwner enforced in mint())
-     *      - to == address(0): burning (blocked for non-owner)
-     *      - otherwise: transfer (only owner can initiate)
+     * @notice Hook that restricts transfers
+     * @dev Allowed transfers:
+     *      - Minting (from == address(0))
+     *      - Owner initiated transfers
+     *      - Transfers TO whitelisted addresses (user -> Reality.eth)
+     *      - Transfers FROM whitelisted addresses (Reality.eth -> user on finalize)
      */
     function _beforeTokenTransfer(
         address from,
@@ -44,10 +52,16 @@ contract PermissionedBToken is ERC20, Ownable {
     ) internal virtual override {
         super._beforeTokenTransfer(from, to, amount);
 
-        // Allow minting (from == address(0)) - already restricted by onlyOwner
+        // Allow minting
         if (from == address(0)) return;
 
-        // All other transfers (including burns) require owner
-        if (msg.sender != owner()) revert OnlyOwnerCanTransfer();
+        // Allow owner to transfer anywhere
+        if (msg.sender == owner()) return;
+
+        // Allow whitelisted addresses to transfer anywhere (Reality.eth returning winnings)
+        if (_isWhitelisted(msg.sender)) return;
+
+        // Allow transfers TO whitelisted addresses (user bonding in Reality.eth)
+        require(_isWhitelisted(to), "PermissionedBToken: transfer not allowed");
     }
 }
