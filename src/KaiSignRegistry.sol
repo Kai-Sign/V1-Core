@@ -26,10 +26,6 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     using SafeERC20 for IERC20;
 
     // ========== CUSTOM ERRORS ==========
-    error UseRevealSpecToken();
-    error UseRevealSpecETH();
-    error UseProposeRevokeToken();
-    error UseProposeRevokeETH();
     error AttestationNotFound();
     error AlreadyRevoked();
     error InvalidExtcodehash();
@@ -47,6 +43,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     error InvalidMerkleProof();
     error BelowMinBond();
     error EmptyMetadataHash();
+    error BondTokenNotSet();
 
     // ========== CONSTANTS ==========
     string public constant VERSION = "1.0.0";
@@ -61,12 +58,11 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     bytes32 public forkStateRoot;
 
     // ========== REALITY.ETH INTEGRATION ==========
-    IRealityETH public immutable realityETH;      // ETH version
-    IRealityETH public realityETH_ERC20;          // ERC20 version
     address public immutable arbitrator;
+    IRealityETH public realityETH;
     uint256 public templateId;
     uint256 public minBond;
-    IERC20 public bondToken;                       // address(0) = ETH mode, otherwise bToken mode
+    IERC20 public bondToken;
     mapping(bytes32 => bytes32) public questionIds;        // uid => Reality.eth questionId
     mapping(bytes32 => bytes32) public revokeQuestionIds;  // uid => Reality.eth questionId for revoke
 
@@ -118,23 +114,15 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         uint256 _universeId,
         address _parentRegistry,
         address _initialOwner,
-        address _realityETH,
         address _arbitrator,
         uint256 _minBond
     ) {
-        require(_realityETH != address(0), "Invalid Reality.eth");
         // Note: arbitrator can be address(0) - questions finalize after timeout without arbitration
 
         universeId = _universeId;
         parentRegistry = _parentRegistry;
-        realityETH = IRealityETH(_realityETH);
         arbitrator = _arbitrator;
         minBond = _minBond;
-
-        // Create Reality.eth template for ERC7730 spec validation
-        templateId = realityETH.createTemplate(
-            '{"title": "Is the ERC7730 specification %s for contract %s on chain %s correct?", "type": "bool", "category": "misc"}'
-        );
 
         if (_initialOwner != msg.sender) {
             _transferOwnership(_initialOwner);
@@ -178,77 +166,39 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     }
 
     /**
-     * @notice Reveal a committed spec with ETH bond 
+     * @notice Reveal a committed spec with ERC20 token bond
+     * @dev Caller must approve bondToken first. Bond token must be set via setBondToken.
      * @param commitmentId The commitment to reveal
      * @param blobHash EIP-4844 blob hash containing metadata
      * @param nonce Nonce used in commitment
+     * @param metadataHash Hash of the metadata content
+     * @param tokenAmount Amount of bondToken to bond
      * @return uid Unique attestation identifier
      */
     function revealSpec(
         bytes32 commitmentId,
         bytes32 blobHash,
         uint256 nonce,
-        bytes32 metadataHash
-    ) external payable nonReentrant whenNotPaused returns (bytes32 uid) {
-        if (address(bondToken) != address(0)) revert UseRevealSpecToken();
-        if (msg.value < minBond) revert BelowMinBond();
-
-        uid = _revealSpec(commitmentId, blobHash, nonce, metadataHash);
-
-        // Create Reality.eth question with ETH bond
-        string memory questionParams = _buildQuestionParams(
-            blobHash,
-            commitments[commitmentId].extcodehash,
-            commitments[commitmentId].chainId
-        );
-
-        bytes32 questionId = realityETH.askQuestionWithMinBond{value: msg.value}(
-            templateId,
-            questionParams,
-            arbitrator,
-            DEFAULT_TIMEOUT,
-            0,  // opening_ts
-            0,  // nonce
-            minBond
-        );
-
-        questionIds[uid] = questionId;
-        emit QuestionCreated(uid, questionId, msg.value);
-    }
-
-    /**
-     * @notice Reveal a committed spec with bToken bond 
-     * @dev Caller must approve bToken first
-     * @param commitmentId The commitment to reveal
-     * @param blobHash EIP-4844 blob hash containing metadata
-     * @param nonce Nonce used in commitment
-     * @param tokenAmount Amount of bToken to bond
-     * @return uid Unique attestation identifier
-     */
-    function revealSpecToken(
-        bytes32 commitmentId,
-        bytes32 blobHash,
-        uint256 nonce,
         bytes32 metadataHash,
         uint256 tokenAmount
     ) external nonReentrant whenNotPaused returns (bytes32 uid) {
-        if (address(bondToken) == address(0)) revert UseRevealSpecETH();
+        if (address(bondToken) == address(0)) revert BondTokenNotSet();
         if (tokenAmount < minBond) revert BelowMinBond();
 
         uid = _revealSpec(commitmentId, blobHash, nonce, metadataHash);
 
-        // Transfer bToken from user and approve Reality.eth ERC20
+        // Transfer bondToken from user and approve Reality.eth
         bondToken.safeTransferFrom(msg.sender, address(this), tokenAmount);
-        bondToken.safeApprove(address(realityETH_ERC20), tokenAmount);
+        bondToken.safeApprove(address(realityETH), tokenAmount);
 
-        // Create Reality.eth question with bToken bond
+        // Create Reality.eth question with token bond
         string memory questionParams = _buildQuestionParams(
             blobHash,
             commitments[commitmentId].extcodehash,
             commitments[commitmentId].chainId
         );
 
-        bytes32 questionId = realityETH_ERC20.askQuestionWithMinBondERC20(
+        bytes32 questionId = realityETH.askQuestionWithMinBondERC20(
             templateId,
             questionParams,
             arbitrator,
@@ -264,7 +214,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     }
 
     /**
-     * @dev Internal reveal logic shared by ETH and token versions
+     * @dev Internal reveal logic
      */
     function _revealSpec(
         bytes32 commitmentId,
@@ -368,16 +318,13 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
 
         bytes32 questionId = questionIds[uid];
 
-        // Use appropriate Reality.eth instance based on mode
-        IRealityETH reality = address(bondToken) == address(0) ? realityETH : realityETH_ERC20;
-
         // Check Reality.eth finalization
-        if (!reality.isFinalized(questionId)) {
+        if (!realityETH.isFinalized(questionId)) {
             revert ChallengePeriodActive();
         }
 
         // Get result from Reality.eth (1 = approved, 0 = rejected)
-        bytes32 result = reality.resultFor(questionId);
+        bytes32 result = realityETH.resultFor(questionId);
         bool approved = (uint256(result) == 1);
 
         att.finalizedAt = uint64(block.timestamp);
@@ -422,51 +369,23 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     // ========== REVOCATION ==========
 
     /**
-     * @notice Propose revocation with ETH bond
+     * @notice Propose revocation with ERC20 token bond
      * @param uid Attestation UID
+     * @param tokenAmount Amount of bondToken to bond
      */
-    function proposeRevoke(bytes32 uid) external payable nonReentrant whenNotPaused {
-        if (address(bondToken) != address(0)) revert UseProposeRevokeToken();
-        if (msg.value < minBond) revert BelowMinBond();
-
-        _proposeRevokeValidation(uid);
-
-        string memory questionParams = _buildRevokeQuestionParams(uid);
-
-        bytes32 revokeQuestionId = realityETH.askQuestionWithMinBond{value: msg.value}(
-            templateId,
-            questionParams,
-            arbitrator,
-            DEFAULT_TIMEOUT,
-            0,
-            0,
-            minBond
-        );
-
-        revokeQuestionIds[uid] = revokeQuestionId;
-
-        emit RevokeProposed(uid, msg.sender);
-        emit RevokeQuestionCreated(uid, revokeQuestionId, msg.value);
-    }
-
-    /**
-     * @notice Propose revocation with bToken bond
-     * @param uid Attestation UID
-     * @param tokenAmount Amount of bToken to bond
-     */
-    function proposeRevokeToken(bytes32 uid, uint256 tokenAmount) external nonReentrant whenNotPaused {
-        if (address(bondToken) == address(0)) revert UseProposeRevokeETH();
+    function proposeRevoke(bytes32 uid, uint256 tokenAmount) external nonReentrant whenNotPaused {
+        if (address(bondToken) == address(0)) revert BondTokenNotSet();
         if (tokenAmount < minBond) revert BelowMinBond();
 
         _proposeRevokeValidation(uid);
 
-        // Transfer bToken and approve Reality.eth ERC20
+        // Transfer bondToken and approve Reality.eth
         bondToken.safeTransferFrom(msg.sender, address(this), tokenAmount);
-        bondToken.safeApprove(address(realityETH_ERC20), tokenAmount);
+        bondToken.safeApprove(address(realityETH), tokenAmount);
 
         string memory questionParams = _buildRevokeQuestionParams(uid);
 
-        bytes32 revokeQuestionId = realityETH_ERC20.askQuestionWithMinBondERC20(
+        bytes32 revokeQuestionId = realityETH.askQuestionWithMinBondERC20(
             templateId,
             questionParams,
             arbitrator,
@@ -519,16 +438,13 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
 
         bytes32 revokeQuestionId = revokeQuestionIds[uid];
 
-        // Use appropriate Reality.eth instance based on mode
-        IRealityETH reality = address(bondToken) == address(0) ? realityETH : realityETH_ERC20;
-
         // Check Reality.eth finalization
-        if (!reality.isFinalized(revokeQuestionId)) {
+        if (!realityETH.isFinalized(revokeQuestionId)) {
             revert ChallengePeriodActive();
         }
 
         // Get result from Reality.eth (1 = revoke approved, 0 = revoke rejected)
-        bytes32 result = reality.resultFor(revokeQuestionId);
+        bytes32 result = realityETH.resultFor(revokeQuestionId);
         bool revokeApproved = (uint256(result) == 1);
 
         if (revokeApproved) {
@@ -651,21 +567,34 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     // ========== ECONOMICS INTEGRATION ==========
 
     /**
-     * @param _bondToken The bToken address
-     * @param _realityETH_ERC20 Reality.eth ERC20 version address
+     * @notice Set the bond token and Reality.eth ERC20 instance
+     * @dev Must be called before any reveal/revoke operations
+     * @param _bondToken The ERC20 token address for bonds
+     * @param _realityETH Reality.eth ERC20 version address
      */
-    function setBondToken(address _bondToken, address _realityETH_ERC20) external onlyOwner {
+    function setBondToken(address _bondToken, address _realityETH) external onlyOwner {
         require(_bondToken != address(0), "Invalid token");
-        require(_realityETH_ERC20 != address(0), "Invalid Reality.eth ERC20");
+        require(_realityETH != address(0), "Invalid Reality.eth");
 
         bondToken = IERC20(_bondToken);
-        realityETH_ERC20 = IRealityETH(_realityETH_ERC20);
+        realityETH = IRealityETH(_realityETH);
 
-        emit BondTokenSet(_bondToken, _realityETH_ERC20);
+        // Create template on Reality.eth
+        templateId = realityETH.createTemplate(
+            '{"title": "Is the ERC7730 specification %s for contract %s on chain %s correct?", "type": "bool", "category": "misc"}'
+        );
+
+        emit BondTokenSet(_bondToken, _realityETH);
     }
 
     function setMinBond(uint256 _minBond) external onlyOwner {
         minBond = _minBond;
+    }
+
+    function migrate(bytes32 _merkleRoot, uint64 _merkleRootIdx) external onlyOwner {
+        require(merkleRoot == bytes32(0), "Already migrated");
+        merkleRoot = _merkleRoot;
+        merkleRootIdx = _merkleRootIdx;
     }
 
     // ========== QUERY FUNCTIONS ==========

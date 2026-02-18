@@ -25,19 +25,14 @@ contract MockBToken is ERC20 {
 /**
  * @title BTokenForkTest
  * @notice Fork tests for bToken (ERC20) mode in KaiSignRegistry
- * @dev Tests the Phase 2 bToken mode and clean break behavior
+ * @dev Tests the ERC20-only bond mode
  *
  * Run with: source ../Kai-Sign-Builder/.env && forge test --match-contract BTokenForkTest -vvv
  */
 contract BTokenForkTest is Test {
     // ========== CONSTANTS ==========
 
-    // Reality.eth v3.0 Sepolia (ETH version)
-    address constant REALITY_ETH_SEPOLIA = 0xaf33DcB6E8c5c4D9dDF579f53031b514d19449CA;
-
     // Reality.eth v3.0 Sepolia ERC20 version
-    // Note: For testing, we'll use the same address since the interface is compatible
-    // In production, this would be a separate deployment
     address constant REALITY_ETH_ERC20_SEPOLIA = 0xaf33DcB6E8c5c4D9dDF579f53031b514d19449CA;
 
     address constant NO_ARBITRATOR = address(0);
@@ -104,24 +99,23 @@ contract BTokenForkTest is Test {
         bToken.transfer(voter, 10_000 ether);
         vm.stopPrank();
 
-        // Deploy KaiSignRegistry in ETH mode
+        // Deploy KaiSignRegistry (ERC20 only mode)
         vm.startPrank(deployer);
         registry = new KaiSignRegistry(
             1,                          // universeId
             address(0),                 // parentRegistry (none)
             deployer,                   // initialOwner
-            REALITY_ETH_SEPOLIA,        // Reality.eth v3.0
             NO_ARBITRATOR,              // no arbitrator
             MIN_BOND                    // minBond
         );
         vm.stopPrank();
 
-        realityETH = IRealityETH(REALITY_ETH_SEPOLIA);
+        realityETH = IRealityETH(REALITY_ETH_ERC20_SEPOLIA);
 
         console.log("=== BToken Fork Test Setup ===");
         console.log("Registry:", address(registry));
         console.log("bToken:", address(bToken));
-        console.log("Initial mode: ETH (bondToken == address(0))");
+        console.log("Note: setBondToken must be called before reveal/revoke operations");
     }
 
     // ========== HELPER FUNCTIONS ==========
@@ -129,22 +123,6 @@ contract BTokenForkTest is Test {
     function _activateBTokenMode() internal {
         vm.prank(deployer);
         registry.setBondToken(address(bToken), REALITY_ETH_ERC20_SEPOLIA);
-    }
-
-    function _commitAndRevealETH(
-        address _proposer,
-        bytes32 _blobHash,
-        uint256 _bond
-    ) internal returns (bytes32 uid, bytes32 questionId, bytes32 commitmentId) {
-        uint256 nonce = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(_blobHash, nonce));
-
-        vm.startPrank(_proposer);
-        commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
-        uid = registry.revealSpec{value: _bond}(commitmentId, _blobHash, nonce, testMetadataHash);
-        vm.stopPrank();
-
-        questionId = registry.questionIds(uid);
     }
 
     function _commitAndRevealToken(
@@ -161,7 +139,7 @@ contract BTokenForkTest is Test {
         bToken.approve(address(registry), _tokenAmount);
 
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
-        uid = registry.revealSpecToken(commitmentId, _blobHash, nonce, testMetadataHash, _tokenAmount);
+        uid = registry.revealSpec(commitmentId, _blobHash, nonce, testMetadataHash, _tokenAmount);
         vm.stopPrank();
 
         questionId = registry.questionIds(uid);
@@ -172,8 +150,8 @@ contract BTokenForkTest is Test {
     function test_SetBondToken() public {
         console.log("\n=== Test: setBondToken Activation ===\n");
 
-        // Verify initial ETH mode
-        assertEq(address(registry.bondToken()), address(0), "Should start in ETH mode");
+        // Verify initial state - bondToken not set
+        assertEq(address(registry.bondToken()), address(0), "Should start with no bond token");
 
         // Activate bToken mode
         vm.prank(deployer);
@@ -181,7 +159,7 @@ contract BTokenForkTest is Test {
 
         // Verify bToken mode
         assertEq(address(registry.bondToken()), address(bToken), "bondToken should be set");
-        assertEq(address(registry.realityETH_ERC20()), REALITY_ETH_ERC20_SEPOLIA, "realityETH_ERC20 should be set");
+        assertEq(address(registry.realityETH()), REALITY_ETH_ERC20_SEPOLIA, "realityETH should be set");
 
         console.log("bToken mode activated successfully!");
     }
@@ -205,9 +183,9 @@ contract BTokenForkTest is Test {
         vm.expectRevert("Invalid token");
         registry.setBondToken(address(0), REALITY_ETH_ERC20_SEPOLIA);
 
-        // Zero Reality.eth ERC20 address
+        // Zero Reality.eth address
         vm.prank(deployer);
-        vm.expectRevert("Invalid Reality.eth ERC20");
+        vm.expectRevert("Invalid Reality.eth");
         registry.setBondToken(address(bToken), address(0));
 
         console.log("Invalid params correctly rejected!");
@@ -239,16 +217,16 @@ contract BTokenForkTest is Test {
         // First activation
         vm.prank(deployer);
         registry.setBondToken(address(bToken), REALITY_ETH_ERC20_SEPOLIA);
-        assertEq(address(registry.realityETH_ERC20()), REALITY_ETH_ERC20_SEPOLIA, "First Reality.eth should be set");
+        assertEq(address(registry.realityETH()), REALITY_ETH_ERC20_SEPOLIA, "First Reality.eth should be set");
+        uint256 firstTemplateId = registry.templateId();
 
-        address newRealityETH = makeAddr("newRealityETH");
-
-        // Change Reality.eth address
+        // Change to same Reality.eth (re-creates template)
         vm.prank(deployer);
-        registry.setBondToken(address(bToken), newRealityETH);
+        registry.setBondToken(address(bToken), REALITY_ETH_ERC20_SEPOLIA);
 
-        assertEq(address(registry.realityETH_ERC20()), newRealityETH, "Reality.eth should be changed");
-        console.log("Reality.eth ERC20 successfully changed!");
+        assertEq(address(registry.realityETH()), REALITY_ETH_ERC20_SEPOLIA, "Reality.eth should still be set");
+        assertTrue(registry.templateId() > firstTemplateId, "New template should be created");
+        console.log("Reality.eth reconfigured, new template created!");
     }
 
     function test_SetBondToken_EmitsEventOnChange() public {
@@ -272,18 +250,30 @@ contract BTokenForkTest is Test {
         console.log("Event emitted on token change!");
     }
 
-    // ========== TEST: revealSpecToken ==========
-    // NOTE: This test requires an ERC20 Reality.eth deployment with our bToken
-    // Sepolia only has ETH Reality.eth, so this test is skipped on Sepolia fork
-    // To fully test: Deploy RealityETH_ERC20 with bToken on testnet
+    // ========== TEST: revealSpec with Token ==========
 
-    function test_RevealSpecToken() public {
-        console.log("\n=== Test: revealSpecToken ===\n");
-        console.log("SKIPPED: Requires ERC20 Reality.eth deployment");
-        console.log("Sepolia only has ETH Reality.eth at 0xaf33DcB6E8c5c4D9dDF579f53031b514d19449CA");
-        console.log("To test: Deploy RealityETH_ERC20 with bToken");
+    function test_RevealSpec_RequiresBondToken() public {
+        console.log("\n=== Test: revealSpec Requires Bond Token ===\n");
 
-        // Test the token approval and transfer logic up to Reality.eth call
+        // Don't activate bToken mode - should fail
+        uint256 nonce = 67890;
+        bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
+
+        vm.startPrank(proposer);
+        bToken.approve(address(registry), MIN_TOKEN_BOND);
+        bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
+
+        vm.expectRevert(abi.encodeWithSignature("BondTokenNotSet()"));
+        registry.revealSpec(commitmentId, testBlobHash, nonce, testMetadataHash, MIN_TOKEN_BOND);
+        vm.stopPrank();
+
+        console.log("revealSpec correctly requires bondToken to be set!");
+    }
+
+    function test_RevealSpec() public {
+        console.log("\n=== Test: revealSpec ===\n");
+        console.log("NOTE: Full test requires ERC20 Reality.eth deployment");
+
         _activateBTokenMode();
 
         uint256 proposerBalanceBefore = bToken.balanceOf(proposer);
@@ -299,110 +289,22 @@ contract BTokenForkTest is Test {
         vm.stopPrank();
 
         assertTrue(commitmentId != bytes32(0), "Commitment should succeed");
-        console.log("Commit succeeded - revealSpecToken needs ERC20 Reality.eth");
+        console.log("Commit succeeded - revealSpec needs ERC20 Reality.eth");
     }
 
-    // ========== TEST: Mode Enforcement ==========
+    // ========== TEST: proposeRevoke with Token ==========
 
-    function test_ModeEnforcement_ETHInBTokenMode() public {
-        console.log("\n=== Test: Mode Enforcement - ETH in bToken Mode ===\n");
+    function test_ProposeRevoke_RequiresBondToken() public {
+        console.log("\n=== Test: proposeRevoke Requires Bond Token ===\n");
 
-        _activateBTokenMode();
+        // Don't activate bToken mode - should fail
+        bytes32 fakeUid = keccak256("fake-uid");
 
-        // Try to use ETH function in bToken mode - should fail
-        uint256 nonce = 11111;
-        bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
-
-        vm.startPrank(proposer);
-        bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
-
-        vm.expectRevert(abi.encodeWithSignature("UseRevealSpecToken()"));
-        registry.revealSpec{value: MIN_BOND}(commitmentId, testBlobHash, nonce, testMetadataHash);
-        vm.stopPrank();
-
-        console.log("ETH revealSpec correctly blocked in bToken mode!");
-    }
-
-    function test_ModeEnforcement_TokenInETHMode() public {
-        console.log("\n=== Test: Mode Enforcement - Token in ETH Mode ===\n");
-
-        // Stay in ETH mode (don't activate bToken)
-
-        uint256 nonce = 22222;
-        bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
-
-        vm.startPrank(proposer);
-        bToken.approve(address(registry), MIN_TOKEN_BOND);
-        bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
-
-        vm.expectRevert(abi.encodeWithSignature("UseRevealSpecETH()"));
-        registry.revealSpecToken(commitmentId, testBlobHash, nonce, testMetadataHash, MIN_TOKEN_BOND);
-        vm.stopPrank();
-
-        console.log("Token revealSpecToken correctly blocked in ETH mode!");
-    }
-
-    function test_ModeEnforcement_ProposeRevokeETHInBTokenMode() public {
-        console.log("\n=== Test: Mode Enforcement - proposeRevoke ETH in bToken Mode ===\n");
-
-        // First submit and finalize an attestation in ETH mode
-        (bytes32 uid, bytes32 questionId,) = _commitAndRevealETH(
-            proposer,
-            testBlobHash,
-            MIN_BOND
-        );
-
-        // Submit APPROVE answer
-        vm.prank(voter);
-        realityETH.submitAnswer{value: MIN_BOND}(questionId, bytes32(uint256(1)), 0);
-
-        // Warp and finalize
-        vm.warp(block.timestamp + DEFAULT_TIMEOUT + 1);
-        bytes32 leaf = keccak256(abi.encode(LEAF_TYPEHASH, testChainId, testExtcodehash, testMetadataHash, uint64(1), false));
-        bytes32[] memory proof = new bytes32[](0);
-        vm.prank(proposer);
-        registry.finalize(uid, leaf, proof);
-
-        // NOW activate bToken mode
-        _activateBTokenMode();
-
-        // Try ETH proposeRevoke - should fail
         vm.prank(challenger);
-        vm.expectRevert(abi.encodeWithSignature("UseProposeRevokeToken()"));
-        registry.proposeRevoke{value: MIN_BOND}(uid);
+        vm.expectRevert(abi.encodeWithSignature("BondTokenNotSet()"));
+        registry.proposeRevoke(fakeUid, MIN_TOKEN_BOND);
 
-        console.log("ETH proposeRevoke correctly blocked in bToken mode!");
-    }
-
-    // ========== TEST: proposeRevokeToken ==========
-    // NOTE: Requires ERC20 Reality.eth - skipped on Sepolia
-
-    function test_ProposeRevokeToken() public {
-        console.log("\n=== Test: proposeRevokeToken ===\n");
-        console.log("SKIPPED: Requires ERC20 Reality.eth deployment");
-
-        // Test the mode enforcement instead
-        _activateBTokenMode();
-
-        // Verify proposeRevokeToken exists and mode check works
-        // (full test requires ERC20 Reality.eth)
-        console.log("proposeRevokeToken mode enforcement tested in test_ModeEnforcement_ProposeRevokeETHInBTokenMode");
-    }
-
-    // ========== TEST: Full bToken Flow with Finalization ==========
-    // NOTE: Requires ERC20 Reality.eth - skipped on Sepolia
-
-    function test_BTokenFinalization() public {
-        console.log("\n=== Test: Full bToken Flow with Finalization ===\n");
-        console.log("SKIPPED: Requires ERC20 Reality.eth deployment");
-        console.log("The flow would be:");
-        console.log("1. Activate bToken mode");
-        console.log("2. commitSpec() - works (tested)");
-        console.log("3. revealSpecToken() - requires ERC20 Reality.eth");
-        console.log("4. Submit answer on Reality.eth ERC20");
-        console.log("5. Warp time past timeout");
-        console.log("6. finalize() - reads from realityETH_ERC20");
-        console.log("\nETH flow is fully tested in RealityEthFork.t.sol");
+        console.log("proposeRevoke correctly requires bondToken to be set!");
     }
 
     // ========== TEST: Universe Fork Architecture ==========
@@ -420,7 +322,6 @@ contract BTokenForkTest is Test {
             2,                          // universeId = 2
             address(registry),          // parentRegistry = first registry
             deployer,
-            REALITY_ETH_SEPOLIA,
             NO_ARBITRATOR,
             MIN_BOND
         );
@@ -439,108 +340,43 @@ contract BTokenForkTest is Test {
         console.log("\nUniverse fork architecture verified!");
     }
 
-    // ========== TEST: Clean Break - ETH Attestations Orphaned ==========
+    // ========== TEST: Full bToken Flow with Finalization ==========
+    // NOTE: Requires ERC20 Reality.eth - skipped on Sepolia
 
-    function test_CleanBreak() public {
-        console.log("\n=== Test: Clean Break - ETH Attestations Orphaned ===\n");
-
-        // 1. Submit spec in ETH mode (don't finalize yet)
-        (bytes32 uid, bytes32 questionId, ) = _commitAndRevealETH(
-            proposer,
-            testBlobHash,
-            MIN_BOND
-        );
-
-        console.log("1. Submitted spec in ETH mode");
-        console.log("   UID:", vm.toString(uid));
-        console.log("   Question ID:", vm.toString(questionId));
-
-        // Submit APPROVE answer
-        vm.prank(voter);
-        realityETH.submitAnswer{value: MIN_BOND}(questionId, bytes32(uint256(1)), 0);
-
-        // Wait for timeout
-        vm.warp(block.timestamp + DEFAULT_TIMEOUT + 1);
-        console.log("2. Answer submitted and timeout reached");
-
-        // 2. NOW activate bToken mode (BEFORE finalizing)
-        _activateBTokenMode();
-        console.log("3. bToken mode activated - CLEAN BREAK");
-
-        // 3. Try to finalize the ETH-based attestation
-        // The finalize function queries the correct Reality.eth based on bondToken
-        // After bToken activation, it will try to query realityETH_ERC20
-        // The question was created on realityETH (ETH version), not realityETH_ERC20
-        // This should cause issues because the question doesn't exist on realityETH_ERC20
-
-        bytes32 leaf = keccak256(abi.encode(LEAF_TYPEHASH, testChainId, testExtcodehash, testMetadataHash, uint64(1), false));
-        bytes32[] memory proof = new bytes32[](0);
-
-        // The attestation cannot be properly finalized because:
-        // - It was submitted to realityETH (ETH version)
-        // - But now the registry queries realityETH_ERC20 for results
-        // - The question doesn't exist on realityETH_ERC20
-
-        // Note: In the current implementation, this may or may not revert depending on
-        // how Reality.eth handles non-existent question IDs. But the attestation
-        // is effectively orphaned because the question result cannot be properly verified.
-
-        // Try finalization - should behave unexpectedly or fail
-        vm.prank(proposer);
-        try registry.finalize(uid, leaf, proof) {
-            // If it doesn't revert, check if the result is correct
-            // The result will likely be incorrect since question doesn't exist
-            IKaiSignRegistry.Attestation memory att = registry.getAttestation(uid);
-            console.log("4. Finalize did not revert but attestation state is:");
-            console.log("   finalizedAt:", att.finalizedAt);
-            console.log("   idx:", att.idx);
-            console.log("   revoked:", att.revoked);
-
-            // If the question doesn't exist on realityETH_ERC20, it won't be finalized
-            // or will be rejected (revoked) because isFinalized returns false
-        } catch {
-            console.log("4. Finalize reverted - ETH attestation is orphaned!");
-        }
-
-        console.log("\nClean break behavior: ETH attestations cannot be properly");
-        console.log("finalized after bToken mode activation.");
-        console.log("Users must re-submit specs in bToken mode.");
+    function test_BTokenFinalization() public {
+        console.log("\n=== Test: Full bToken Flow with Finalization ===\n");
+        console.log("SKIPPED: Requires ERC20 Reality.eth deployment");
+        console.log("The flow would be:");
+        console.log("1. setBondToken() - configure token and Reality.eth");
+        console.log("2. commitSpec() - works (tested)");
+        console.log("3. revealSpec() - requires ERC20 Reality.eth");
+        console.log("4. Submit answer on Reality.eth ERC20");
+        console.log("5. Warp time past timeout");
+        console.log("6. finalize() - reads from realityETH");
     }
 
-    // ========== TEST: Complete bToken Workflow After Clean Break ==========
-    // NOTE: Partially tested - bToken submission requires ERC20 Reality.eth
+    // ========== TEST: Complete bToken Workflow ==========
 
-    function test_CompleteWorkflowAfterCleanBreak() public {
-        console.log("\n=== Test: Complete Workflow After Clean Break ===\n");
+    function test_CompleteWorkflow() public {
+        console.log("\n=== Test: Complete Workflow ===\n");
 
-        // 1. Start with some ETH attestations (left unfinalized)
-        bytes32 ethBlobHash = keccak256("eth-spec-orphaned");
-        (bytes32 ethUid, , ) = _commitAndRevealETH(proposer, ethBlobHash, MIN_BOND);
-        console.log("1. ETH spec submitted (will be orphaned):", vm.toString(ethUid));
-
-        // 2. Activate bToken mode
+        // 1. Activate bToken mode
         _activateBTokenMode();
-        console.log("2. bToken mode activated");
+        console.log("1. bToken mode activated");
 
-        // 3. Verify ETH functions are now blocked
+        // 2. Verify commit works
         uint256 nonce = 99999;
-        bytes32 commitment = keccak256(abi.encodePacked(keccak256("blocked"), nonce));
+        bytes32 commitment = keccak256(abi.encodePacked(keccak256("test-spec"), nonce));
 
         vm.startPrank(proposer);
+        bToken.approve(address(registry), MIN_TOKEN_BOND);
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
-
-        vm.expectRevert(abi.encodeWithSignature("UseRevealSpecToken()"));
-        registry.revealSpec{value: MIN_BOND}(commitmentId, keccak256("blocked"), nonce, testMetadataHash);
         vm.stopPrank();
 
-        console.log("3. ETH revealSpec correctly blocked after bToken activation");
+        assertTrue(commitmentId != bytes32(0), "Commitment should succeed");
+        console.log("2. Commit succeeded");
 
-        // 4. Verify ETH attestation remains unfinalized (orphaned)
-        IKaiSignRegistry.Attestation memory ethAtt = registry.getAttestation(ethUid);
-        assertEq(ethAtt.finalizedAt, 0, "ETH attestation should remain unfinalized");
-        console.log("4. ETH spec remains orphaned (finalizedAt=0)");
-
-        console.log("\nClean break verified: ETH specs orphaned, ETH functions blocked");
-        console.log("Full bToken workflow requires ERC20 Reality.eth deployment");
+        console.log("\nFull workflow requires ERC20 Reality.eth deployment");
+        console.log("See test_BTokenFinalization for expected flow");
     }
 }
