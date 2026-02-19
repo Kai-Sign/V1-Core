@@ -44,6 +44,8 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     error BelowMinBond();
     error EmptyMetadataHash();
     error BondTokenNotSet();
+    error IdxBeyondMigrated();
+    error AlreadyImported();
 
     // ========== CONSTANTS ==========
     string public constant VERSION = "1.0.0";
@@ -627,6 +629,74 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         ));
 
         return verifyMerkleProof(leaf, merkleProof, idx - 1, merkleRoot);
+    }
+
+    /**
+     * @notice Import a migrated attestation by proving inclusion in merkle root
+     * @dev Once imported, normal proposeRevoke/finalizeRevoke flow can be used
+     * @param uid Original attestation UID
+     * @param chainId Target chain ID
+     * @param extcodehash Target contract bytecode hash
+     * @param blobHash EIP-4844 blob hash
+     * @param metadataHash Hash of metadata content
+     * @param attester Original attester address
+     * @param timestamp Original creation timestamp
+     * @param idx Global index in merkle tree
+     * @param finalizedAt When originally finalized
+     * @param merkleProof Proof of inclusion
+     */
+    function importMigratedAttestation(
+        bytes32 uid,
+        uint256 chainId,
+        bytes32 extcodehash,
+        bytes32 blobHash,
+        bytes32 metadataHash,
+        address attester,
+        uint64 timestamp,
+        uint64 idx,
+        uint64 finalizedAt,
+        bytes32[] calldata merkleProof
+    ) external whenNotPaused {
+        // Must be within migrated range
+        if (idx > merkleRootIdx) revert IdxBeyondMigrated();
+
+        // Must not already exist
+        if (_attestations[uid].timestamp != 0) revert AlreadyImported();
+
+        // Verify merkle proof (attestation was not revoked at migration time)
+        bytes32 leaf = keccak256(abi.encode(
+            LEAF_TYPEHASH,
+            chainId,
+            extcodehash,
+            metadataHash,
+            idx,
+            false  // not revoked
+        ));
+
+        if (!verifyMerkleProof(leaf, merkleProof, idx - 1, merkleRoot)) {
+            revert InvalidMerkleProof();
+        }
+
+        // Store the attestation
+        _attestations[uid] = Attestation({
+            uid: uid,
+            chainId: chainId,
+            extcodehash: extcodehash,
+            blobHash: blobHash,
+            metadataHash: metadataHash,
+            attester: attester,
+            timestamp: timestamp,
+            idx: idx,
+            revoked: false,
+            finalizedAt: finalizedAt,
+            revokeProposedAt: 0,
+            revokeProposer: address(0)
+        });
+
+        // Index by chain and bytecode
+        _specsByChainAndBytecode[chainId][extcodehash].push(uid);
+
+        emit SpecIndexed(uid, chainId, extcodehash, blobHash, attester, idx);
     }
 
     // ========== QUERY FUNCTIONS ==========
