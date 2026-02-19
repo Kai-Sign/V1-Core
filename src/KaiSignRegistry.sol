@@ -635,15 +635,33 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         emit MinBondUpdated(old, _minBond);
     }
 
+    /**
+     * @notice Migrate state from a previous contract
+     * @dev Imports the incremental tree frontier and recomputes the merkle root.
+     *      The frontier must be computed off-chain by simulating incremental insertions
+     *      of all leaves from the old contract in order.
+     *
+     *      For standard binary trees: compute frontier by replaying all leaf insertions
+     *      through the incremental algorithm off-chain, then pass the resulting
+     *      filledSubtrees array here.
+     *
+     *      IMPORTANT: The computed merkle root will differ from the old contract's root
+     *      if the old contract used a different tree algorithm (e.g., standard binary tree).
+     *      This is expected - the new root represents the same leaves in incremental format.
+     *
+     * @param _frontier The filledSubtrees array computed from replaying old leaves
+     * @param _currentIdx Number of leaves in the old tree (next finalized spec will be _currentIdx + 1)
+     */
     function migrate(bytes32[20] calldata _frontier, uint64 _currentIdx) external onlyOwner {
         require(merkleRoot == bytes32(0), "Already migrated");
+        require(_currentIdx > 0, "Nothing to migrate");
 
-        // Import frontier
+        // Import frontier for incremental tree continuation
         for (uint256 i = 0; i < TREE_DEPTH; i++) {
             filledSubtrees[i] = _frontier[i];
         }
 
-        // Recompute root from frontier to verify consistency
+        // Recompute root from frontier to ensure consistency
         merkleRoot = _computeRootFromFrontier(_currentIdx);
         merkleRootIdx = _currentIdx;
         currentIdx = _currentIdx;
@@ -687,32 +705,30 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
 
     /**
      * @notice Import a migrated attestation by proving inclusion in merkle root
-     * @dev Once imported, normal proposeRevoke/finalizeRevoke flow can be used
-     * @param uid Original attestation UID
+     * @dev Once imported, normal proposeRevoke/finalizeRevoke flow can be used.
+     *      UID is derived deterministically from proof-verified fields.
+     *      Unverifiable fields (blobHash, attester) are zeroed; timestamps use block.timestamp.
      * @param chainId Target chain ID
      * @param extcodehash Target contract bytecode hash
-     * @param blobHash EIP-4844 blob hash
      * @param metadataHash Hash of metadata content
-     * @param attester Original attester address
-     * @param timestamp Original creation timestamp
      * @param idx Global index in merkle tree
-     * @param finalizedAt When originally finalized
      * @param merkleProof Proof of inclusion
      */
     function importMigratedAttestation(
-        bytes32 uid,
         uint256 chainId,
         bytes32 extcodehash,
-        bytes32 blobHash,
         bytes32 metadataHash,
-        address attester,
-        uint64 timestamp,
         uint64 idx,
-        uint64 finalizedAt,
         bytes32[] calldata merkleProof
     ) external whenNotPaused {
+        // idx 0 is invalid (indices are 1-based)
+        if (idx == 0) revert AttestationNotFound();
+
         // Must be within migrated range
         if (idx > merkleRootIdx) revert IdxBeyondMigrated();
+
+        // Derive UID deterministically from proof-verified fields
+        bytes32 uid = keccak256(abi.encode(chainId, extcodehash, metadataHash, idx));
 
         // Must not already exist
         if (_attestations[uid].timestamp != 0) revert AlreadyImported();
@@ -731,18 +747,18 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
             revert InvalidMerkleProof();
         }
 
-        // Store the attestation
+        // Store the attestation with zeroed unverified fields
         _attestations[uid] = Attestation({
             uid: uid,
             chainId: chainId,
             extcodehash: extcodehash,
-            blobHash: blobHash,
+            blobHash: bytes32(0),
             metadataHash: metadataHash,
-            attester: attester,
-            timestamp: timestamp,
+            attester: address(0),
+            timestamp: uint64(block.timestamp),
             idx: idx,
             revoked: false,
-            finalizedAt: finalizedAt,
+            finalizedAt: uint64(block.timestamp),
             revokeProposedAt: 0,
             revokeProposer: address(0)
         });
@@ -750,7 +766,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         // Index by chain and bytecode
         _specsByChainAndBytecode[chainId][extcodehash].push(uid);
 
-        emit SpecIndexed(uid, chainId, extcodehash, blobHash, attester, idx);
+        emit SpecIndexed(uid, chainId, extcodehash, bytes32(0), address(0), idx);
     }
 
     // ========== QUERY FUNCTIONS ==========
