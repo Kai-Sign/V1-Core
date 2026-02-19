@@ -46,6 +46,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     error BondTokenNotSet();
     error IdxBeyondMigrated();
     error AlreadyImported();
+    error TreeFull();
 
     // ========== CONSTANTS ==========
     string public constant VERSION = "1.0.0";
@@ -65,8 +66,12 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     uint256 public templateId;
     uint256 public minBond;
     IERC20 public bondToken;
-    mapping(bytes32 => bytes32) public questionIds;        // uid => Reality.eth questionId
-    mapping(bytes32 => bytes32) public revokeQuestionIds;  // uid => Reality.eth questionId for revoke
+    struct QuestionData {
+        bytes32 questionId;
+        IRealityETH realityInstance;
+    }
+    mapping(bytes32 => QuestionData) public questions;        // uid => submission question
+    mapping(bytes32 => QuestionData) public revokeQuestions;   // uid => revoke question
 
     // ========== INDEX FOR MERKLE ORDERING ==========
     uint64 public override currentIdx;
@@ -215,7 +220,12 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
             tokenAmount
         );
 
-        questionIds[uid] = questionId;
+        bondToken.forceApprove(address(realityETH), 0);
+
+        questions[uid] = QuestionData({
+            questionId: questionId,
+            realityInstance: realityETH
+        });
         emit QuestionCreated(uid, questionId, tokenAmount);
     }
 
@@ -316,21 +326,20 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         if (att.timestamp == 0) revert AttestationNotFound();
         if (att.finalizedAt != 0) revert AlreadyFinalized();
 
-        bytes32 questionId = questionIds[uid];
+        QuestionData memory q = questions[uid];
 
-        // Check Reality.eth finalization
-        if (!realityETH.isFinalized(questionId)) {
+        if (!q.realityInstance.isFinalized(q.questionId)) {
             revert ChallengePeriodActive();
         }
 
-        // Get result from Reality.eth (1 = approved, 0 = rejected)
-        bytes32 result = realityETH.resultFor(questionId);
+        bytes32 result = q.realityInstance.resultFor(q.questionId);
         bool approved = (uint256(result) == 1);
 
         att.finalizedAt = uint64(block.timestamp);
 
         if (approved) {
             // APPROVED: Assign index and add to merkle tree
+            if (currentIdx >= (1 << TREE_DEPTH)) revert TreeFull();
             uint64 idx = ++currentIdx;
             att.idx = idx;
 
@@ -391,7 +400,12 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
             tokenAmount
         );
 
-        revokeQuestionIds[uid] = revokeQuestionId;
+        bondToken.forceApprove(address(realityETH), 0);
+
+        revokeQuestions[uid] = QuestionData({
+            questionId: revokeQuestionId,
+            realityInstance: realityETH
+        });
 
         emit RevokeProposed(uid, msg.sender);
         emit RevokeQuestionCreated(uid, revokeQuestionId, tokenAmount);
@@ -431,15 +445,13 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
 
         if (att.revokeProposedAt == 0) revert NoRevokeProposal();
 
-        bytes32 revokeQuestionId = revokeQuestionIds[uid];
+        QuestionData memory rq = revokeQuestions[uid];
 
-        // Check Reality.eth finalization
-        if (!realityETH.isFinalized(revokeQuestionId)) {
+        if (!rq.realityInstance.isFinalized(rq.questionId)) {
             revert ChallengePeriodActive();
         }
 
-        // Get result from Reality.eth (1 = revoke approved, 0 = revoke rejected)
-        bytes32 result = realityETH.resultFor(revokeQuestionId);
+        bytes32 result = rq.realityInstance.resultFor(rq.questionId);
         bool revokeApproved = (uint256(result) == 1);
 
         if (revokeApproved) {
@@ -459,6 +471,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         Attestation memory att = _attestations[uid];
         if (att.timestamp == 0) revert AttestationNotFound();
         if (att.finalizedAt == 0) revert NotFinalized();
+        if (att.idx == 0) revert NotFinalized();
 
         leaf = keccak256(abi.encode(
             LEAF_TYPEHASH,
@@ -466,7 +479,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
             att.extcodehash,
             att.metadataHash,
             att.idx,
-            att.revoked
+            false  // tree is append-only; leaves always inserted as not-revoked
         ));
     }
 
@@ -499,8 +512,17 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     ) external view returns (bool valid) {
         Attestation memory att = _attestations[uid];
         if (att.finalizedAt == 0) revert NotFinalized();
+        if (att.idx == 0) revert NotFinalized();
+        if (att.revoked) revert AlreadyRevoked();
 
-        bytes32 leaf = computeAttestationLeaf(uid);
+        bytes32 leaf = keccak256(abi.encode(
+            LEAF_TYPEHASH,
+            att.chainId,
+            att.extcodehash,
+            att.metadataHash,
+            att.idx,
+            false
+        ));
         return verifyMerkleProof(leaf, proof, att.idx - 1, merkleRoot);
     }
 
@@ -608,7 +630,9 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     }
 
     function setMinBond(uint256 _minBond) external onlyOwner {
+        uint256 old = minBond;
         minBond = _minBond;
+        emit MinBondUpdated(old, _minBond);
     }
 
     function migrate(bytes32[20] calldata _frontier, uint64 _currentIdx) external onlyOwner {
@@ -623,6 +647,8 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         merkleRoot = _computeRootFromFrontier(_currentIdx);
         merkleRootIdx = _currentIdx;
         currentIdx = _currentIdx;
+
+        emit Migrated(merkleRoot, _currentIdx);
     }
 
     /**
