@@ -67,11 +67,7 @@ interface IKaiSignRegistry {
     ) external returns (bytes32 uid);
 
     // ========== FINALIZATION ==========
-    function finalize(
-        bytes32 uid,
-        bytes32 newMerkleRoot,
-        bytes32[] calldata merkleProof
-    ) external;
+    function finalize(bytes32 uid) external;
 
     // ========== REVOCATION ==========
     function proposeRevoke(bytes32 uid, uint256 tokenAmount) external;
@@ -89,6 +85,29 @@ interface IKaiSignRegistry {
         bytes32 uid,
         bytes32[] calldata proof
     ) external view returns (bool valid);
+
+    // ========== MIGRATION ==========
+    function verifyMigratedAttestation(
+        uint256 chainId,
+        bytes32 extcodehash,
+        bytes32 metadataHash,
+        uint64 idx,
+        bool revoked,
+        bytes32[] calldata merkleProof
+    ) external view;
+
+    function importMigratedAttestation(
+        bytes32 uid,
+        uint256 chainId,
+        bytes32 extcodehash,
+        bytes32 blobHash,
+        bytes32 metadataHash,
+        address attester,
+        uint64 timestamp,
+        uint64 idx,
+        uint64 finalizedAt,
+        bytes32[] calldata merkleProof
+    ) external;
 
     // ========== QUERIES ==========
     function getAttestation(bytes32 uid) external view returns (Attestation memory);

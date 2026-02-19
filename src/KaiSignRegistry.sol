@@ -87,6 +87,10 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     }
     mapping(bytes32 => CommitData) public commitments;
 
+    // ========== INCREMENTAL MERKLE TREE ==========
+    uint256 public constant TREE_DEPTH = 20;
+    bytes32[20] public filledSubtrees;
+
     // ========== MERKLE ROOT CHECKPOINT ==========
     bytes32 public override merkleRoot;
     uint64 public override merkleRootIdx;
@@ -191,7 +195,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
 
         // Transfer bondToken from user and approve Reality.eth
         bondToken.safeTransferFrom(msg.sender, address(this), tokenAmount);
-        bondToken.safeApprove(address(realityETH), tokenAmount);
+        bondToken.forceApprove(address(realityETH), tokenAmount);
 
         // Create Reality.eth question with token bond
         string memory questionParams = _buildQuestionParams(
@@ -303,16 +307,10 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
 
     /**
      * @notice Finalize an attestation after Reality.eth question is resolved
-     * @dev Only APPROVED specs get indexed in merkle tree
+     * @dev Only APPROVED specs get indexed in on-chain incremental merkle tree
      * @param uid Attestation UID
-     * @param newMerkleRoot Proposed new merkle root (only used if approved)
-     * @param merkleProof Proof for the new leaf (only used if approved)
      */
-    function finalize(
-        bytes32 uid,
-        bytes32 newMerkleRoot,
-        bytes32[] calldata merkleProof
-    ) external nonReentrant whenNotPaused {
+    function finalize(bytes32 uid) external nonReentrant whenNotPaused {
         Attestation storage att = _attestations[uid];
 
         if (att.timestamp == 0) revert AttestationNotFound();
@@ -349,13 +347,8 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
                 false  // not revoked
             ));
 
-            // Verify merkle proof
-            if (!_verifyMerkleUpdate(leaf, att.idx, merkleProof, newMerkleRoot)) {
-                revert InvalidMerkleProof();
-            }
-
-            // Update merkle root
-            merkleRoot = newMerkleRoot;
+            // Insert leaf into on-chain incremental tree
+            merkleRoot = _insertLeaf(leaf);
             merkleRootIdx = att.idx;
 
             emit SpecIndexed(uid, att.chainId, att.extcodehash, att.blobHash, att.attester, idx);
@@ -383,7 +376,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
 
         // Transfer bondToken and approve Reality.eth
         bondToken.safeTransferFrom(msg.sender, address(this), tokenAmount);
-        bondToken.safeApprove(address(realityETH), tokenAmount);
+        bondToken.forceApprove(address(realityETH), tokenAmount);
 
         string memory questionParams = _buildRevokeQuestionParams(uid);
 
@@ -511,26 +504,51 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         return verifyMerkleProof(leaf, proof, att.idx - 1, merkleRoot);
     }
 
-    function _verifyMerkleUpdate(
-        bytes32 leaf,
-        uint64 leafIdx,
-        bytes32[] calldata proof,
-        bytes32 expectedRoot
-    ) internal pure returns (bool) {
-        bytes32 computedHash = leaf;
-        uint256 position = leafIdx - 1; // idx is 1-based
+    /**
+     * @dev Insert a leaf into the on-chain incremental Merkle tree
+     * @param leaf The leaf hash to insert
+     * @return root The new Merkle root after insertion
+     */
+    function _insertLeaf(bytes32 leaf) internal returns (bytes32 root) {
+        uint256 pos = currentIdx - 1; // 0-based tree position (currentIdx is 1-based after increment)
+        bytes32 currentHash = leaf;
+        bytes32 z = bytes32(0);
 
-        for (uint256 i = 0; i < proof.length; i++) {
-            bytes32 proofElement = proof[i];
-
-            if ((position >> i) & 1 == 0) {
-                computedHash = keccak256(abi.encodePacked(computedHash, proofElement));
+        for (uint256 i = 0; i < TREE_DEPTH; i++) {
+            if (pos % 2 == 0) {
+                filledSubtrees[i] = currentHash;
+                currentHash = keccak256(abi.encodePacked(currentHash, z));
             } else {
-                computedHash = keccak256(abi.encodePacked(proofElement, computedHash));
+                currentHash = keccak256(abi.encodePacked(filledSubtrees[i], currentHash));
             }
+            z = keccak256(abi.encodePacked(z, z));
+            pos /= 2;
         }
 
-        return computedHash == expectedRoot;
+        return currentHash;
+    }
+
+    /**
+     * @dev Recompute Merkle root from the frontier array and leaf count
+     * @param numLeaves Number of leaves inserted into the tree
+     * @return root The computed Merkle root
+     */
+    function _computeRootFromFrontier(uint64 numLeaves) internal view returns (bytes32) {
+        bytes32 current = bytes32(0);
+        uint256 n = numLeaves;
+        bytes32 z = bytes32(0);
+
+        for (uint256 i = 0; i < TREE_DEPTH; i++) {
+            if (n & 1 == 1) {
+                current = keccak256(abi.encodePacked(filledSubtrees[i], current));
+            } else {
+                current = keccak256(abi.encodePacked(current, z));
+            }
+            z = keccak256(abi.encodePacked(z, z));
+            n >>= 1;
+        }
+
+        return current;
     }
 
     // ========== STRING HELPERS (for Reality.eth question params) ==========
@@ -593,23 +611,31 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         minBond = _minBond;
     }
 
-    function migrate(bytes32 _merkleRoot, uint64 _currentIdx) external onlyOwner {
+    function migrate(bytes32[20] calldata _frontier, uint64 _currentIdx) external onlyOwner {
         require(merkleRoot == bytes32(0), "Already migrated");
-        merkleRoot = _merkleRoot;
+
+        // Import frontier
+        for (uint256 i = 0; i < TREE_DEPTH; i++) {
+            filledSubtrees[i] = _frontier[i];
+        }
+
+        // Recompute root from frontier to verify consistency
+        merkleRoot = _computeRootFromFrontier(_currentIdx);
         merkleRootIdx = _currentIdx;
         currentIdx = _currentIdx;
     }
 
     /**
      * @notice Verify a migrated attestation against the merkle root
-     * @dev For attestations from old registry - clients fetch data off-chain, verify on-chain
+     * @dev Reverts on invalid proof. Designed for trustless verification from hardware wallets:
+     *      valid proof → call succeeds, invalid proof → call reverts.
+     *      No need to trust software to interpret a return value.
      * @param chainId Target chain ID
      * @param extcodehash Target contract bytecode hash
      * @param metadataHash Hash of the metadata content
      * @param idx Global index in merkle tree
      * @param revoked Whether attestation is revoked
      * @param merkleProof Proof of inclusion in the migrated merkle root
-     * @return valid True if proof is valid against stored merkle root
      */
     function verifyMigratedAttestation(
         uint256 chainId,
@@ -618,7 +644,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         uint64 idx,
         bool revoked,
         bytes32[] calldata merkleProof
-    ) external view returns (bool valid) {
+    ) external view {
         bytes32 leaf = keccak256(abi.encode(
             LEAF_TYPEHASH,
             chainId,
@@ -628,7 +654,9 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
             revoked
         ));
 
-        return verifyMerkleProof(leaf, merkleProof, idx - 1, merkleRoot);
+        if (!verifyMerkleProof(leaf, merkleProof, idx - 1, merkleRoot)) {
+            revert InvalidMerkleProof();
+        }
     }
 
     /**
