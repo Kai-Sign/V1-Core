@@ -591,10 +591,42 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         minBond = _minBond;
     }
 
-    function migrate(bytes32 _merkleRoot, uint64 _merkleRootIdx) external onlyOwner {
+    function migrate(bytes32 _merkleRoot, uint64 _currentIdx) external onlyOwner {
         require(merkleRoot == bytes32(0), "Already migrated");
         merkleRoot = _merkleRoot;
-        merkleRootIdx = _merkleRootIdx;
+        merkleRootIdx = _currentIdx;
+        currentIdx = _currentIdx;
+    }
+
+    /**
+     * @notice Verify a migrated attestation against the merkle root
+     * @dev For attestations from old registry - clients fetch data off-chain, verify on-chain
+     * @param chainId Target chain ID
+     * @param extcodehash Target contract bytecode hash
+     * @param metadataHash Hash of the metadata content
+     * @param idx Global index in merkle tree
+     * @param revoked Whether attestation is revoked
+     * @param merkleProof Proof of inclusion in the migrated merkle root
+     * @return valid True if proof is valid against stored merkle root
+     */
+    function verifyMigratedAttestation(
+        uint256 chainId,
+        bytes32 extcodehash,
+        bytes32 metadataHash,
+        uint64 idx,
+        bool revoked,
+        bytes32[] calldata merkleProof
+    ) external view returns (bool valid) {
+        bytes32 leaf = keccak256(abi.encode(
+            LEAF_TYPEHASH,
+            chainId,
+            extcodehash,
+            metadataHash,
+            idx,
+            revoked
+        ));
+
+        return verifyMerkleProof(leaf, merkleProof, idx - 1, merkleRoot);
     }
 
     // ========== QUERY FUNCTIONS ==========
