@@ -79,7 +79,7 @@ contract SecurityTests is Test {
 
         vm.startPrank(owner);
         registry = new KaiSignRegistry(
-            1, address(0), owner,
+            20, 1, address(0), owner,
             NO_ARBITRATOR, MIN_BOND
         );
 
@@ -165,7 +165,7 @@ contract SecurityTests is Test {
         // Deploy new registry without setBondToken
         vm.prank(owner);
         KaiSignRegistry newRegistry = new KaiSignRegistry(
-            2, address(0), owner,
+            20, 2, address(0), owner,
             NO_ARBITRATOR, MIN_BOND
         );
 
@@ -190,6 +190,9 @@ contract SecurityTests is Test {
         token.approve(address(registry), MIN_BOND);
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
 
+        // Advance time past MIN_REVEAL_DELAY
+        vm.warp(block.timestamp + 2);
+
         // Wrong nonce
         vm.expectRevert(abi.encodeWithSignature("InvalidReveal()"));
         registry.revealSpec(commitmentId, testBlobHash, 99999, testMetadataHash, MIN_BOND);
@@ -203,6 +206,9 @@ contract SecurityTests is Test {
         vm.startPrank(attester);
         token.approve(address(registry), MIN_BOND);
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);
+
+        // Advance time past MIN_REVEAL_DELAY
+        vm.warp(block.timestamp + 2);
 
         // Wrong blob hash
         vm.expectRevert(abi.encodeWithSignature("InvalidReveal()"));
@@ -260,7 +266,7 @@ contract SecurityTests is Test {
         // Deploy new registry without setBondToken
         vm.prank(owner);
         KaiSignRegistry newRegistry = new KaiSignRegistry(
-            2, address(0), owner,
+            20, 2, address(0), owner,
             NO_ARBITRATOR, MIN_BOND
         );
 

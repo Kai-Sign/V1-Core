@@ -53,6 +53,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     error ConfigChanged();
     error InvalidToken();
     error InvalidRealityETH();
+    error InvalidTreeDepth();
 
     // ========== CONSTANTS ==========
     string public constant VERSION = "1.0.0";
@@ -100,8 +101,8 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     mapping(bytes32 => CommitData) public commitments;
 
     // ========== INCREMENTAL MERKLE TREE ==========
-    uint256 public constant TREE_DEPTH = 20;
-    bytes32[20] public filledSubtrees;
+    uint256 public immutable treeDepth;
+    mapping(uint256 => bytes32) public filledSubtrees;
 
     // ========== MERKLE ROOT CHECKPOINT ==========
     bytes32 public override merkleRoot;
@@ -128,12 +129,15 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
 
     // ========== CONSTRUCTOR ==========
     constructor(
+        uint256 _treeDepth,
         uint256 _universeId,
         address _parentRegistry,
         address _initialOwner,
         address _arbitrator,
         uint256 _minBond
     ) {
+        if (_treeDepth == 0 || _treeDepth > 32) revert InvalidTreeDepth();
+        treeDepth = _treeDepth;
         // Note: arbitrator can be address(0) - questions finalize after timeout without arbitration
 
         universeId = _universeId;
@@ -353,7 +357,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
 
         if (approved) {
             // APPROVED: Assign index and add to merkle tree
-            if (currentIdx >= (1 << TREE_DEPTH)) revert TreeFull();
+            if (currentIdx >= (1 << treeDepth)) revert TreeFull();
             uint64 idx = ++currentIdx;
             att.idx = idx;
 
@@ -471,7 +475,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
 
         if (revokeApproved) {
             att.revoked = true;
-            if (currentIdx >= (1 << TREE_DEPTH)) revert TreeFull();
+            if (currentIdx >= (1 << treeDepth)) revert TreeFull();
             uint64 revokeIdx = ++currentIdx;
             att.revokeIdx = revokeIdx;
 
@@ -522,8 +526,8 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         bytes32[] calldata proof,
         uint256 index,
         bytes32 root
-    ) public pure returns (bool valid) {
-        if (proof.length != TREE_DEPTH) revert InvalidMerkleProof();
+    ) public view returns (bool valid) {
+        if (proof.length != treeDepth) revert InvalidMerkleProof();
         bytes32 computedHash = leaf;
 
         for (uint256 i = 0; i < proof.length; i++) {
@@ -551,7 +555,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         bytes32 currentHash = leaf;
         bytes32 z = bytes32(0);
 
-        for (uint256 i = 0; i < TREE_DEPTH; i++) {
+        for (uint256 i = 0; i < treeDepth; i++) {
             if (pos % 2 == 0) {
                 filledSubtrees[i] = currentHash;
                 currentHash = keccak256(abi.encodePacked(currentHash, z));
@@ -575,7 +579,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         uint256 n = numLeaves;
         bytes32 z = bytes32(0);
 
-        for (uint256 i = 0; i < TREE_DEPTH; i++) {
+        for (uint256 i = 0; i < treeDepth; i++) {
             if (n & 1 == 1) {
                 current = keccak256(abi.encodePacked(filledSubtrees[i], current));
             } else {
@@ -668,12 +672,13 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
      * @param _frontier The filledSubtrees array computed from replaying old leaves
      * @param _currentIdx Number of leaves in the old tree (next finalized spec will be _currentIdx + 1)
      */
-    function migrate(bytes32[20] calldata _frontier, uint64 _currentIdx) external onlyOwner {
+    function migrate(bytes32[] calldata _frontier, uint64 _currentIdx) external onlyOwner {
         if (merkleRoot != bytes32(0)) revert AlreadyMigrated();
         if (_currentIdx == 0) revert NothingToMigrate();
+        if (_frontier.length != treeDepth) revert InvalidMerkleProof();
 
         // Import frontier for incremental tree continuation
-        for (uint256 i = 0; i < TREE_DEPTH; i++) {
+        for (uint256 i = 0; i < treeDepth; i++) {
             filledSubtrees[i] = _frontier[i];
         }
 

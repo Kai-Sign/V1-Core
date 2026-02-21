@@ -85,7 +85,7 @@ interface IKaiSignRegistry {
         bytes32[] calldata proof,
         uint256 index,
         bytes32 root
-    ) external pure returns (bool valid);
+    ) external view returns (bool valid);
     // ========== MIGRATION ==========
     function verifyMigratedAttestation(
         uint256 chainId,
@@ -113,6 +113,7 @@ interface IKaiSignRegistry {
     function currentIdx() external view returns (uint64);
     function merkleRoot() external view returns (bytes32);
     function merkleRootIdx() external view returns (uint64);
+    function treeDepth() external view returns (uint256);
     function universeId() external view returns (uint256);
     function parentRegistry() external view returns (address);
 
