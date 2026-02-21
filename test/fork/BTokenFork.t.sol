@@ -102,6 +102,7 @@ contract BTokenForkTest is Test {
         // Deploy KaiSignRegistry (ERC20 only mode)
         vm.startPrank(deployer);
         registry = new KaiSignRegistry(
+            20,                         // treeDepth
             1,                          // universeId
             address(0),                 // parentRegistry (none)
             deployer,                   // initialOwner
@@ -142,7 +143,7 @@ contract BTokenForkTest is Test {
         uid = registry.revealSpec(commitmentId, _blobHash, nonce, testMetadataHash, _tokenAmount);
         vm.stopPrank();
 
-        questionId = registry.questionIds(uid);
+        (questionId,) = registry.questions(uid);
     }
 
     // ========== TEST: setBondToken Activation ==========
@@ -180,12 +181,12 @@ contract BTokenForkTest is Test {
 
         // Zero bToken address
         vm.prank(deployer);
-        vm.expectRevert("Invalid token");
+        vm.expectRevert(abi.encodeWithSignature("InvalidToken()"));
         registry.setBondToken(address(0), REALITY_ETH_ERC20_SEPOLIA);
 
         // Zero Reality.eth address
         vm.prank(deployer);
-        vm.expectRevert("Invalid Reality.eth");
+        vm.expectRevert(abi.encodeWithSignature("InvalidRealityETH()"));
         registry.setBondToken(address(bToken), address(0));
 
         console.log("Invalid params correctly rejected!");
@@ -319,6 +320,7 @@ contract BTokenForkTest is Test {
         // Deploy child registry (universe 2) with parent
         vm.startPrank(deployer);
         KaiSignRegistry childRegistry = new KaiSignRegistry(
+            20,                         // treeDepth
             2,                          // universeId = 2
             address(registry),          // parentRegistry = first registry
             deployer,

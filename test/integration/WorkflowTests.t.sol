@@ -78,7 +78,7 @@ contract WorkflowTests is Test {
 
         vm.startPrank(owner);
         registry = new KaiSignRegistry(
-            1, address(0), owner,
+            20, 1, address(0), owner,
             NO_ARBITRATOR, MIN_BOND
         );
 
@@ -109,7 +109,7 @@ contract WorkflowTests is Test {
         console.log("   Commitment ID:", vm.toString(commitmentId));
 
         // Verify commitment data
-        (address committer, , uint256 storedChainId, bytes32 storedExtcodehash, bool isRevealed) =
+        (address committer, , bool isRevealed, , uint256 storedChainId, bytes32 storedExtcodehash) =
             registry.commitments(commitmentId);
 
         assertEq(committer, specProvider, "Committer should match");
@@ -180,8 +180,8 @@ contract WorkflowTests is Test {
         console.log("Spec 2 committed:", vm.toString(commitmentId2));
 
         // Verify both commitments exist
-        (address c1, , , , ) = registry.commitments(commitmentId1);
-        (address c2, , , , ) = registry.commitments(commitmentId2);
+        (address c1, , , , ,) = registry.commitments(commitmentId1);
+        (address c2, , , , , ) = registry.commitments(commitmentId2);
 
         assertEq(c1, specProvider, "Commit 1 should exist");
         assertEq(c2, specProvider, "Commit 2 should exist");
@@ -204,6 +204,7 @@ contract WorkflowTests is Test {
         // Deploy child registry
         vm.startPrank(owner);
         KaiSignRegistry childRegistry = new KaiSignRegistry(
+            20,                         // treeDepth
             2,                          // universeId = 2
             address(registry),          // parentRegistry = first registry
             owner,

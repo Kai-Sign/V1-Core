@@ -76,6 +76,7 @@ contract KaiSignRegistryTest is Test {
         // Deploy registry
         vm.startPrank(owner);
         registry = new KaiSignRegistry(
+            20,                   // treeDepth
             1,                    // universeId
             address(0),           // parentRegistry
             owner,                // initialOwner
@@ -91,12 +92,31 @@ contract KaiSignRegistryTest is Test {
     // ========== CONSTRUCTOR TESTS ==========
 
     function test_Constructor_SetsCorrectValues() public view {
+        assertEq(registry.treeDepth(), 20);
         assertEq(registry.universeId(), 1);
         assertEq(registry.parentRegistry(), address(0));
         assertEq(registry.owner(), owner);
         assertEq(registry.minBond(), MIN_BOND);
         assertTrue(registry.templateId() > 0);
         assertEq(address(registry.bondToken()), address(token));
+    }
+
+    function test_Constructor_InvalidTreeDepth_Zero() public {
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSignature("InvalidTreeDepth()"));
+        new KaiSignRegistry(
+            0, 1, address(0), owner,
+            NO_ARBITRATOR, MIN_BOND
+        );
+    }
+
+    function test_Constructor_InvalidTreeDepth_TooLarge() public {
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSignature("InvalidTreeDepth()"));
+        new KaiSignRegistry(
+            33, 1, address(0), owner,
+            NO_ARBITRATOR, MIN_BOND
+        );
     }
 
     // ========== SET MIN BOND TESTS ==========
@@ -129,7 +149,7 @@ contract KaiSignRegistryTest is Test {
         // Deploy new registry without setBondToken
         vm.prank(owner);
         KaiSignRegistry newRegistry = new KaiSignRegistry(
-            2, address(0), owner,
+            20, 2, address(0), owner,
             NO_ARBITRATOR, MIN_BOND
         );
 
@@ -148,24 +168,24 @@ contract KaiSignRegistryTest is Test {
     function test_SetBondToken_InvalidToken() public {
         vm.prank(owner);
         KaiSignRegistry newRegistry = new KaiSignRegistry(
-            2, address(0), owner,
+            20, 2, address(0), owner,
             NO_ARBITRATOR, MIN_BOND
         );
 
         vm.prank(owner);
-        vm.expectRevert("Invalid token");
+        vm.expectRevert(abi.encodeWithSignature("InvalidToken()"));
         newRegistry.setBondToken(address(0), REALITY_ETH_SEPOLIA);
     }
 
     function test_SetBondToken_InvalidRealityETH() public {
         vm.prank(owner);
         KaiSignRegistry newRegistry = new KaiSignRegistry(
-            2, address(0), owner,
+            20, 2, address(0), owner,
             NO_ARBITRATOR, MIN_BOND
         );
 
         vm.prank(owner);
-        vm.expectRevert("Invalid Reality.eth");
+        vm.expectRevert(abi.encodeWithSignature("InvalidRealityETH()"));
         newRegistry.setBondToken(address(token), address(0));
     }
 
@@ -217,7 +237,7 @@ contract KaiSignRegistryTest is Test {
 
         assertTrue(commitmentId != bytes32(0));
 
-        (address committer, , uint256 storedChainId, bytes32 storedExtcodehash, bool isRevealed) =
+        (address committer, , bool isRevealed, , uint256 storedChainId, bytes32 storedExtcodehash) =
             registry.commitments(commitmentId);
 
         assertEq(committer, attester1);
@@ -248,7 +268,7 @@ contract KaiSignRegistryTest is Test {
         // Deploy new registry without setBondToken
         vm.prank(owner);
         KaiSignRegistry newRegistry = new KaiSignRegistry(
-            2, address(0), owner,
+            20, 2, address(0), owner,
             NO_ARBITRATOR, MIN_BOND
         );
 
@@ -290,6 +310,9 @@ contract KaiSignRegistryTest is Test {
         token.approve(address(registry), MIN_BOND);
         bytes32 commitmentId = registry.commitSpec(commitment, 1, keccak256("bytecode"));
 
+        // Advance time past MIN_REVEAL_DELAY
+        vm.warp(block.timestamp + 2);
+
         // Wrong nonce
         vm.expectRevert(abi.encodeWithSignature("InvalidReveal()"));
         registry.revealSpec(commitmentId, blobHash, 99999, metadataHash, MIN_BOND);
@@ -316,13 +339,13 @@ contract KaiSignRegistryTest is Test {
 
     // ========== MERKLE HELPERS TESTS ==========
 
-    function test_VerifyMerkleProof_SingleLeaf() public view {
+    function test_VerifyMerkleProof_RejectsWrongLength() public {
         bytes32 leaf = keccak256("leaf");
         bytes32[] memory proof = new bytes32[](0);
 
-        // Single leaf: leaf is its own root
-        bool valid = registry.verifyMerkleProof(leaf, proof, 0, leaf);
-        assertTrue(valid);
+        // Empty proof should revert (must be treeDepth)
+        vm.expectRevert(abi.encodeWithSignature("InvalidMerkleProof()"));
+        registry.verifyMerkleProof(leaf, proof, 0, leaf);
     }
 
     // ========== STATE GETTERS TESTS ==========

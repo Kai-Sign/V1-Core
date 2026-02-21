@@ -103,6 +103,7 @@ contract RealityEthForkTest is Test {
         // Deploy KaiSignRegistry
         vm.startPrank(deployer);
         registry = new KaiSignRegistry(
+            20,                   // treeDepth
             1,                    // universeId
             address(0),           // parentRegistry (none)
             deployer,             // initialOwner
@@ -149,10 +150,11 @@ contract RealityEthForkTest is Test {
         // Check commitment data
         (
             address committer,
-            uint64 commitTimestamp,
+            ,
+            bool isRevealed,
+            ,
             uint256 chainId,
-            bytes32 extcodehash,
-            bool isRevealed
+            bytes32 extcodehash
         ) = registry.commitments(commitmentId);
 
         assertEq(committer, proposer, "Committer should match");
@@ -203,6 +205,7 @@ contract RealityEthForkTest is Test {
         // Deploy child registry (universe 2) with parent
         vm.startPrank(deployer);
         KaiSignRegistry childRegistry = new KaiSignRegistry(
+            20,                         // treeDepth
             2,                          // universeId = 2
             address(registry),          // parentRegistry = first registry
             deployer,
