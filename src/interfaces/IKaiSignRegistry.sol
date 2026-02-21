@@ -21,6 +21,7 @@ interface IKaiSignRegistry {
         uint64 finalizedAt;         // When finalized (0 = not finalized)
         uint64 revokeProposedAt;    // When revoke was proposed (0 = no proposal)
         address revokeProposer;     // Who proposed the revoke (for incentive claims)
+        uint64 revokeIdx;           // Tree index of revocation leaf (0 = not revoked on-tree)
     }
 
     // ========== EVENTS ==========
@@ -50,6 +51,10 @@ interface IKaiSignRegistry {
     );
 
     event MerkleRootUpdated(bytes32 indexed newRoot, uint64 atIdx);
+
+    event MinBondUpdated(uint256 oldBond, uint256 newBond);
+
+    event Migrated(bytes32 indexed merkleRoot, uint64 currentIdx);
 
     // ========== COMMIT-REVEAL ==========
     function commitSpec(
@@ -81,11 +86,6 @@ interface IKaiSignRegistry {
         uint256 index,
         bytes32 root
     ) external pure returns (bool valid);
-    function verifyAttestationInclusion(
-        bytes32 uid,
-        bytes32[] calldata proof
-    ) external view returns (bool valid);
-
     // ========== MIGRATION ==========
     function verifyMigratedAttestation(
         uint256 chainId,
@@ -97,15 +97,10 @@ interface IKaiSignRegistry {
     ) external view;
 
     function importMigratedAttestation(
-        bytes32 uid,
         uint256 chainId,
         bytes32 extcodehash,
-        bytes32 blobHash,
         bytes32 metadataHash,
-        address attester,
-        uint64 timestamp,
         uint64 idx,
-        uint64 finalizedAt,
         bytes32[] calldata merkleProof
     ) external;
 
