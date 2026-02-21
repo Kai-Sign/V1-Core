@@ -371,7 +371,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
             ));
 
             // Insert leaf into on-chain incremental tree
-            merkleRoot = _insertLeaf(leaf);
+            merkleRoot = _insertLeaf(leaf, idx - 1);
             merkleRootIdx = att.idx;
 
             emit SpecIndexed(uid, att.chainId, att.extcodehash, att.blobHash, att.attester, idx);
@@ -484,7 +484,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
                 true  // revoked
             ));
 
-            merkleRoot = _insertLeaf(leaf);
+            merkleRoot = _insertLeaf(leaf, revokeIdx - 1);
             merkleRootIdx = revokeIdx;
 
             emit RevokeFinalized(uid, true);
@@ -544,10 +544,10 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     /**
      * @dev Insert a leaf into the on-chain incremental Merkle tree
      * @param leaf The leaf hash to insert
+     * @param pos The 0-based tree position for this leaf
      * @return root The new Merkle root after insertion
      */
-    function _insertLeaf(bytes32 leaf) internal returns (bytes32 root) {
-        uint256 pos = currentIdx - 1; // 0-based tree position (currentIdx is 1-based after increment)
+    function _insertLeaf(bytes32 leaf, uint256 pos) internal returns (bytes32 root) {
         bytes32 currentHash = leaf;
         bytes32 z = bytes32(0);
 
