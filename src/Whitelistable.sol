@@ -9,14 +9,14 @@
 
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable2Step.sol";  // Fix M-4: two-step ownership transfer
 
 /**
  * @title Whitelistable
  * @dev Allows accounts to be whitelisted by a "whitelister" role
  *      Based on Circle/USDC Blacklistable pattern (inverted logic)
  */
-abstract contract Whitelistable is Ownable {
+abstract contract Whitelistable is Ownable2Step {
     address public whitelister;
     mapping(address => bool) internal _whitelisted;
 

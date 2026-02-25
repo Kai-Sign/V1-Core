@@ -55,6 +55,9 @@ contract PermissionedBToken is ERC20, Whitelistable {
         // Allow minting
         if (from == address(0)) return;
 
+        // Fix RM-7: Allow burning (to == address(0) is not whitelisted, so burns would revert)
+        if (to == address(0)) return;
+
         // Allow owner to transfer anywhere
         if (msg.sender == owner()) return;
 
