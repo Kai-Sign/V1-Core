@@ -22,6 +22,7 @@ interface IKaiSignRegistry {
         uint64 revokeProposedAt;    // When revoke was proposed (0 = no proposal)
         address revokeProposer;     // Who proposed the revoke (for incentive claims)
         uint64 revokeIdx;           // Tree index of revocation leaf (0 = not revoked on-tree)
+        uint32 revokeAttempt;       // Fix RH-1: counter for revoke attempts (nonce uniqueness)
     }
 
     // ========== EVENTS ==========

@@ -54,6 +54,8 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     error InvalidToken();
     error InvalidRealityETH();
     error InvalidTreeDepth();
+    error InvalidQuestionResult();      
+    error UnresolvedQuestionResult();  
 
     // ========== CONSTANTS ==========
     string public constant VERSION = "1.0.0";
@@ -107,6 +109,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     // ========== MERKLE ROOT CHECKPOINT ==========
     bytes32 public override merkleRoot;
     uint64 public override merkleRootIdx;
+    uint64 public migratedIdx;  
 
     // ========== EVENTS ==========
     event BondTokenSet(address indexed token, address indexed realityERC20);
@@ -226,7 +229,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
             arbitrator,
             DEFAULT_TIMEOUT,
             0,  // opening_ts
-            0,  // nonce
+            uint256(uid),  // nonce 
             minBond,
             tokenAmount
         );
@@ -299,7 +302,8 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
             finalizedAt: 0,
             revokeProposedAt: 0,
             revokeProposer: address(0),
-            revokeIdx: 0
+            revokeIdx: 0,
+            revokeAttempt: 0
         });
 
         emit LogRevealSpec(
@@ -337,7 +341,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
      * @dev Only APPROVED specs get indexed in on-chain incremental merkle tree
      * @param uid Attestation UID
      */
-    function finalize(bytes32 uid) external nonReentrant whenNotPaused {
+    function finalize(bytes32 uid) external nonReentrant {  
         Attestation storage att = _attestations[uid];
 
         if (att.timestamp == 0) revert AttestationNotFound();
@@ -351,6 +355,9 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         }
 
         bytes32 result = q.realityInstance.resultFor(q.questionId);
+        
+        if (uint256(result) == type(uint256).max) revert InvalidQuestionResult();
+        if (uint256(result) == type(uint256).max - 1) revert UnresolvedQuestionResult();
         bool approved = (uint256(result) == 1);
 
         att.finalizedAt = uint64(block.timestamp);
@@ -377,6 +384,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
             // Insert leaf into on-chain incremental tree
             merkleRoot = _insertLeaf(leaf, idx - 1);
             merkleRootIdx = att.idx;
+            emit MerkleRootUpdated(merkleRoot, merkleRootIdx);  
 
             emit SpecIndexed(uid, att.chainId, att.extcodehash, att.blobHash, att.attester, idx);
         } else {
@@ -413,7 +421,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
             arbitrator,
             DEFAULT_TIMEOUT,
             0,
-            0,
+            uint256(keccak256(abi.encode(uid, _attestations[uid].revokeAttempt))),  
             minBond,
             tokenAmount
         );
@@ -437,6 +445,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         if (att.revoked) revert AlreadyRevoked();
         if (att.revokeProposedAt != 0) revert RevokeAlreadyProposed();
 
+        att.revokeAttempt++;  
         att.revokeProposedAt = uint64(block.timestamp);
         att.revokeProposer = msg.sender;
     }
@@ -458,7 +467,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
      * @notice Finalize a revoke proposal based on Reality.eth result
      * @param uid Attestation UID
      */
-    function finalizeRevoke(bytes32 uid) external nonReentrant whenNotPaused {
+    function finalizeRevoke(bytes32 uid) external nonReentrant {  
         Attestation storage att = _attestations[uid];
 
         if (att.revokeProposedAt == 0) revert NoRevokeProposal();
@@ -471,6 +480,9 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         }
 
         bytes32 result = rq.realityInstance.resultFor(rq.questionId);
+        
+        if (uint256(result) == type(uint256).max) revert InvalidQuestionResult();
+        if (uint256(result) == type(uint256).max - 1) revert UnresolvedQuestionResult();
         bool revokeApproved = (uint256(result) == 1);
 
         if (revokeApproved) {
@@ -490,6 +502,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
 
             merkleRoot = _insertLeaf(leaf, revokeIdx - 1);
             merkleRootIdx = revokeIdx;
+            emit MerkleRootUpdated(merkleRoot, merkleRootIdx);  
 
             emit RevokeFinalized(uid, true);
         } else {
@@ -650,6 +663,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     }
 
     function setMinBond(uint256 _minBond) external onlyOwner {
+        configNonce++;  
         uint256 old = minBond;
         minBond = _minBond;
         emit MinBondUpdated(old, _minBond);
@@ -686,6 +700,8 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         merkleRoot = _computeRootFromFrontier(_currentIdx);
         merkleRootIdx = _currentIdx;
         currentIdx = _currentIdx;
+        migratedIdx = _currentIdx;  
+        emit MerkleRootUpdated(merkleRoot, merkleRootIdx);  
 
         emit Migrated(merkleRoot, _currentIdx);
     }
@@ -747,8 +763,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         // idx 0 is invalid (indices are 1-based)
         if (idx == 0) revert AttestationNotFound();
 
-        // Must be within migrated range
-        if (idx > merkleRootIdx) revert IdxBeyondMigrated();
+        if (idx > migratedIdx) revert IdxBeyondMigrated();
 
         // Derive UID deterministically from proof-verified fields
         bytes32 uid = keccak256(abi.encode(chainId, extcodehash, metadataHash, idx));
@@ -784,7 +799,8 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
             finalizedAt: uint64(block.timestamp),
             revokeProposedAt: 0,
             revokeProposer: address(0),
-            revokeIdx: 0
+            revokeIdx: 0,
+            revokeAttempt: 0
         });
 
         // Index by chain and bytecode
