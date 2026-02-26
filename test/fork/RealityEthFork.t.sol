@@ -139,7 +139,7 @@ contract RealityEthForkTest is Test {
 
     function test_CommitFlow() public {
         uint256 nonce = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
+        bytes32 commitment = keccak256(abi.encode(testBlobHash, nonce));
 
         // Commit
         vm.prank(proposer);
@@ -167,7 +167,7 @@ contract RealityEthForkTest is Test {
 
     function test_BondTokenRequired() public {
         uint256 nonce = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
+        bytes32 commitment = keccak256(abi.encode(testBlobHash, nonce));
 
         vm.startPrank(proposer);
         token.approve(address(registry), MIN_BOND);

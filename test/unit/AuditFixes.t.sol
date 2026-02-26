@@ -122,7 +122,7 @@ contract AuditFixesTest is Test {
         uint256 chainId,
         uint256 nonce
     ) internal returns (bytes32 uid, bytes32 questionId) {
-        bytes32 commitment = keccak256(abi.encodePacked(blobHash, nonce));
+        bytes32 commitment = keccak256(abi.encode(blobHash, nonce));
 
         vm.startPrank(attester);
         token.approve(address(registry), MIN_BOND);
@@ -279,7 +279,7 @@ contract AuditFixesTest is Test {
         bytes32 blobHash = keccak256("blob-rm1");
         bytes32 metadataHash = keccak256("meta-rm1");
         uint256 nonce = 777;
-        bytes32 commitment = keccak256(abi.encodePacked(blobHash, nonce));
+        bytes32 commitment = keccak256(abi.encode(blobHash, nonce));
 
         // Commit
         vm.prank(attester1);
@@ -466,7 +466,7 @@ contract AuditFixesTest is Test {
         // Commit (doesn't need token transfer)
         bytes32 blobHash = keccak256("blob-rm6");
         uint256 nonce = 666;
-        bytes32 commitment = keccak256(abi.encodePacked(blobHash, nonce));
+        bytes32 commitment = keccak256(abi.encode(blobHash, nonce));
 
         vm.prank(attester1);
         bytes32 commitmentId = reg2.commitSpec(commitment, 1, keccak256("code-rm6"));
@@ -577,5 +577,82 @@ contract AuditFixesTest is Test {
         assertTrue(att.finalizedAt != 0, "Should be finalized");
         assertTrue(att.revoked, "Should be revoked (rejected)");
         assertEq(att.idx, 0, "Should have no index (rejected)");
+    }
+
+    // ================================================================
+    //  Hardening: Zero hashes precomputed in constructor
+    // ================================================================
+
+    function test_ZeroHashesPrecomputed() public view {
+        // Manually compute the zero hash chain and verify against storage
+        bytes32 z = bytes32(0);
+        for (uint256 i = 0; i < 20; i++) {
+            assertEq(
+                registry.zeroHashes(i),
+                z,
+                string(abi.encodePacked("zeroHashes[", _uintToStr(i), "] mismatch"))
+            );
+            z = keccak256(abi.encodePacked(z, z));
+        }
+    }
+
+    function _uintToStr(uint256 v) internal pure returns (string memory) {
+        if (v == 0) return "0";
+        uint256 digits;
+        uint256 tmp = v;
+        while (tmp != 0) { digits++; tmp /= 10; }
+        bytes memory buf = new bytes(digits);
+        while (v != 0) { digits--; buf[digits] = bytes1(uint8(48 + v % 10)); v /= 10; }
+        return string(buf);
+    }
+
+    // ================================================================
+    //  Hardening: abi.encode commit-reveal roundtrip
+    // ================================================================
+
+    function test_AbiEncodeCommitRevealRoundtrip() public {
+        // Full commit→reveal→finalize roundtrip after abi.encode change
+        bytes32 uid = _fullApproveAttestation(
+            attester1, keccak256("blob-abi"), keccak256("meta-abi"),
+            keccak256("code-abi"), 1, 501
+        );
+
+        IKaiSignRegistry.Attestation memory att = registry.getAttestation(uid);
+        assertTrue(att.finalizedAt != 0, "Should be finalized");
+        assertFalse(att.revoked, "Should be approved");
+        assertTrue(att.idx > 0, "Should have merkle index");
+    }
+
+    // ================================================================
+    //  Hardening: revokeQuestions cleared on rejection
+    // ================================================================
+
+    function test_RevokeRejectionClearsQuestion() public {
+        // Approve an attestation
+        bytes32 uid = _fullApproveAttestation(
+            attester1, keccak256("blob-rqclr"), keccak256("meta-rqclr"),
+            keccak256("code-rqclr"), 1, 601
+        );
+
+        // Propose revoke
+        bytes32 rqId = _proposeRevokeWithAnswer(revoker, uid);
+
+        // Verify revokeQuestions[uid] is set
+        (bytes32 questionId,) = registry.revokeQuestions(uid);
+        assertTrue(questionId != bytes32(0), "revokeQuestion should be set after proposal");
+
+        // Reject the revoke
+        _answerAndFinalize(rqId, bytes32(uint256(0)), revoker);
+        registry.finalizeRevoke(uid);
+
+        // Verify revokeQuestions[uid] is now cleared
+        (bytes32 questionIdAfter, IRealityETH instanceAfter) = registry.revokeQuestions(uid);
+        assertEq(questionIdAfter, bytes32(0), "revokeQuestion questionId should be zeroed after rejection");
+        assertEq(address(instanceAfter), address(0), "revokeQuestion instance should be zeroed after rejection");
+
+        // Verify attestation is NOT revoked (rejection means spec stays valid)
+        IKaiSignRegistry.Attestation memory att = registry.getAttestation(uid);
+        assertFalse(att.revoked, "Should not be revoked after rejection");
+        assertEq(att.revokeProposedAt, 0, "revokeProposedAt should be reset");
     }
 }

@@ -132,7 +132,7 @@ contract BTokenForkTest is Test {
         uint256 _tokenAmount
     ) internal returns (bytes32 uid, bytes32 questionId) {
         uint256 nonce = 67890;
-        bytes32 commitment = keccak256(abi.encodePacked(_blobHash, nonce));
+        bytes32 commitment = keccak256(abi.encode(_blobHash, nonce));
 
         vm.startPrank(_proposer);
 
@@ -258,7 +258,7 @@ contract BTokenForkTest is Test {
 
         // Don't activate bToken mode - should fail
         uint256 nonce = 67890;
-        bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
+        bytes32 commitment = keccak256(abi.encode(testBlobHash, nonce));
 
         vm.startPrank(proposer);
         bToken.approve(address(registry), MIN_TOKEN_BOND);
@@ -282,7 +282,7 @@ contract BTokenForkTest is Test {
 
         // Commit works
         uint256 nonce = 67890;
-        bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
+        bytes32 commitment = keccak256(abi.encode(testBlobHash, nonce));
 
         vm.startPrank(proposer);
         bToken.approve(address(registry), MIN_TOKEN_BOND);
@@ -368,7 +368,7 @@ contract BTokenForkTest is Test {
 
         // 2. Verify commit works
         uint256 nonce = 99999;
-        bytes32 commitment = keccak256(abi.encodePacked(keccak256("test-spec"), nonce));
+        bytes32 commitment = keccak256(abi.encode(keccak256("test-spec"), nonce));
 
         vm.startPrank(proposer);
         bToken.approve(address(registry), MIN_TOKEN_BOND);
