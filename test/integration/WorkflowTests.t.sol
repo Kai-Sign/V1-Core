@@ -100,7 +100,7 @@ contract WorkflowTests is Test {
 
         // Step 1: Provider commits spec
         console.log("Step 1: Commit spec");
-        bytes32 commitment = keccak256(abi.encodePacked(blobHash, nonce));
+        bytes32 commitment = keccak256(abi.encode(blobHash, nonce));
 
         vm.prank(specProvider);
         bytes32 commitmentId = registry.commitSpec(commitment, chainId, extcodehash);
@@ -133,7 +133,7 @@ contract WorkflowTests is Test {
         uint256 nonce = block.timestamp;
 
         // Step 1: Commit
-        bytes32 commitment = keccak256(abi.encodePacked(blobHash, nonce));
+        bytes32 commitment = keccak256(abi.encode(blobHash, nonce));
         vm.prank(specProvider);
         bytes32 commitmentId = registry.commitSpec(commitment, chainId, extcodehash);
 
@@ -164,7 +164,7 @@ contract WorkflowTests is Test {
         // Commit first spec
         bytes32 blobHash1 = keccak256("spec-v1");
         uint256 nonce1 = block.timestamp;
-        bytes32 commitment1 = keccak256(abi.encodePacked(blobHash1, nonce1));
+        bytes32 commitment1 = keccak256(abi.encode(blobHash1, nonce1));
 
         vm.prank(specProvider);
         bytes32 commitmentId1 = registry.commitSpec(commitment1, chainId, extcodehash);
@@ -173,7 +173,7 @@ contract WorkflowTests is Test {
         // Commit second spec
         bytes32 blobHash2 = keccak256("spec-v2");
         uint256 nonce2 = block.timestamp + 1;
-        bytes32 commitment2 = keccak256(abi.encodePacked(blobHash2, nonce2));
+        bytes32 commitment2 = keccak256(abi.encode(blobHash2, nonce2));
 
         vm.prank(specProvider);
         bytes32 commitmentId2 = registry.commitSpec(commitment2, chainId, extcodehash);

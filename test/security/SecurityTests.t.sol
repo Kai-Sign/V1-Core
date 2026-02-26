@@ -137,7 +137,7 @@ contract SecurityTests is Test {
 
     function test_Validation_EmptyBlobHash() public {
         uint256 nonce = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(bytes32(0), nonce));
+        bytes32 commitment = keccak256(abi.encode(bytes32(0), nonce));
 
         vm.startPrank(attester);
         token.approve(address(registry), MIN_BOND);
@@ -150,7 +150,7 @@ contract SecurityTests is Test {
 
     function test_Validation_BelowMinBond() public {
         uint256 nonce = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
+        bytes32 commitment = keccak256(abi.encode(testBlobHash, nonce));
 
         vm.startPrank(attester);
         token.approve(address(registry), MIN_BOND);
@@ -170,7 +170,7 @@ contract SecurityTests is Test {
         );
 
         uint256 nonce = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
+        bytes32 commitment = keccak256(abi.encode(testBlobHash, nonce));
 
         vm.startPrank(attester);
         bytes32 commitmentId = newRegistry.commitSpec(commitment, testChainId, testExtcodehash);
@@ -184,7 +184,7 @@ contract SecurityTests is Test {
 
     function test_Security_InvalidReveal_WrongNonce() public {
         uint256 nonce = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
+        bytes32 commitment = keccak256(abi.encode(testBlobHash, nonce));
 
         vm.startPrank(attester);
         token.approve(address(registry), MIN_BOND);
@@ -201,7 +201,7 @@ contract SecurityTests is Test {
 
     function test_Security_InvalidReveal_WrongBlobHash() public {
         uint256 nonce = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
+        bytes32 commitment = keccak256(abi.encode(testBlobHash, nonce));
 
         vm.startPrank(attester);
         token.approve(address(registry), MIN_BOND);
@@ -218,7 +218,7 @@ contract SecurityTests is Test {
 
     function test_Security_InvalidReveal_WrongCommitter() public {
         uint256 nonce = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
+        bytes32 commitment = keccak256(abi.encode(testBlobHash, nonce));
 
         // Attester commits
         vm.prank(attester);
@@ -247,7 +247,7 @@ contract SecurityTests is Test {
     function test_Security_ProposeRevoke_NotFinalized() public {
         // Create commitment but don't reveal/finalize
         uint256 nonce = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
+        bytes32 commitment = keccak256(abi.encode(testBlobHash, nonce));
 
         vm.prank(attester);
         registry.commitSpec(commitment, testChainId, testExtcodehash);
@@ -291,7 +291,7 @@ contract SecurityTests is Test {
 
     function test_Security_Paused_RevealSpec() public {
         uint256 nonce = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(testBlobHash, nonce));
+        bytes32 commitment = keccak256(abi.encode(testBlobHash, nonce));
 
         vm.prank(attester);
         bytes32 commitmentId = registry.commitSpec(commitment, testChainId, testExtcodehash);

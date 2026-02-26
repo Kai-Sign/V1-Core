@@ -275,7 +275,7 @@ contract KaiSignRegistryTest is Test {
         bytes32 blobHash = keccak256("blob-data");
         bytes32 metadataHash = keccak256("metadata-content");
         uint256 nonce = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(blobHash, nonce));
+        bytes32 commitment = keccak256(abi.encode(blobHash, nonce));
 
         vm.startPrank(attester1);
         bytes32 commitmentId = newRegistry.commitSpec(commitment, 1, keccak256("bytecode"));
@@ -289,7 +289,7 @@ contract KaiSignRegistryTest is Test {
         bytes32 blobHash = keccak256("blob-data");
         bytes32 metadataHash = keccak256("metadata-content");
         uint256 nonce = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(blobHash, nonce));
+        bytes32 commitment = keccak256(abi.encode(blobHash, nonce));
 
         vm.startPrank(attester1);
         token.approve(address(registry), MIN_BOND);
@@ -304,7 +304,7 @@ contract KaiSignRegistryTest is Test {
         bytes32 blobHash = keccak256("blob-data");
         bytes32 metadataHash = keccak256("metadata-content");
         uint256 nonce = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(blobHash, nonce));
+        bytes32 commitment = keccak256(abi.encode(blobHash, nonce));
 
         vm.startPrank(attester1);
         token.approve(address(registry), MIN_BOND);

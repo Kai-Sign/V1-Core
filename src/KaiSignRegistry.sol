@@ -105,6 +105,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     // ========== INCREMENTAL MERKLE TREE ==========
     uint256 public immutable treeDepth;
     mapping(uint256 => bytes32) public filledSubtrees;
+    mapping(uint256 => bytes32) public zeroHashes;
 
     // ========== MERKLE ROOT CHECKPOINT ==========
     bytes32 public override merkleRoot;
@@ -141,6 +142,14 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     ) {
         if (_treeDepth == 0 || _treeDepth > 32) revert InvalidTreeDepth();
         treeDepth = _treeDepth;
+
+        // Precompute zero hashes for empty subtrees at each level
+        bytes32 z = bytes32(0);
+        for (uint256 i = 0; i < _treeDepth; i++) {
+            zeroHashes[i] = z;
+            z = keccak256(abi.encodePacked(z, z));
+        }
+
         // Note: arbitrator can be address(0) - questions finalize after timeout without arbitration
 
         universeId = _universeId;
@@ -170,7 +179,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         if (chainId == 0) revert InvalidChainId();
         if (extcodehash == bytes32(0)) revert InvalidExtcodehash();
 
-        commitmentId = keccak256(abi.encodePacked(
+        commitmentId = keccak256(abi.encode(
             commitment,
             msg.sender,
             chainId,
@@ -262,8 +271,8 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
 
         // Verify commitment
         // Note: must cast commitTimestamp to uint256 to match how commitmentId was computed
-        bytes32 expectedCommitment = keccak256(abi.encodePacked(blobHash, nonce));
-        bytes32 reconstructedId = keccak256(abi.encodePacked(
+        bytes32 expectedCommitment = keccak256(abi.encode(blobHash, nonce));
+        bytes32 reconstructedId = keccak256(abi.encode(
             expectedCommitment,
             commitment.committer,
             commitment.chainId,
@@ -281,7 +290,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         commitment.isRevealed = true;
 
         // Create attestation (not indexed yet - will be indexed only if approved)
-        uid = keccak256(abi.encodePacked(
+        uid = keccak256(abi.encode(
             commitment.chainId,
             commitment.extcodehash,
             blobHash,
@@ -506,9 +515,10 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
 
             emit RevokeFinalized(uid, true);
         } else {
-            // Revoke rejected - reset proposal
+            // Revoke rejected - reset proposal and clean up stale question
             att.revokeProposedAt = 0;
             att.revokeProposer = address(0);
+            delete revokeQuestions[uid];
             emit RevokeFinalized(uid, false);
         }
     }
@@ -566,16 +576,14 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
      */
     function _insertLeaf(bytes32 leaf, uint256 pos) internal returns (bytes32 root) {
         bytes32 currentHash = leaf;
-        bytes32 z = bytes32(0);
 
         for (uint256 i = 0; i < treeDepth; i++) {
             if (pos % 2 == 0) {
                 filledSubtrees[i] = currentHash;
-                currentHash = keccak256(abi.encodePacked(currentHash, z));
+                currentHash = keccak256(abi.encodePacked(currentHash, zeroHashes[i]));
             } else {
                 currentHash = keccak256(abi.encodePacked(filledSubtrees[i], currentHash));
             }
-            z = keccak256(abi.encodePacked(z, z));
             pos /= 2;
         }
 
@@ -590,15 +598,13 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     function _computeRootFromFrontier(uint64 numLeaves) internal view returns (bytes32) {
         bytes32 current = bytes32(0);
         uint256 n = numLeaves;
-        bytes32 z = bytes32(0);
 
         for (uint256 i = 0; i < treeDepth; i++) {
             if (n & 1 == 1) {
                 current = keccak256(abi.encodePacked(filledSubtrees[i], current));
             } else {
-                current = keccak256(abi.encodePacked(current, z));
+                current = keccak256(abi.encodePacked(current, zeroHashes[i]));
             }
-            z = keccak256(abi.encodePacked(z, z));
             n >>= 1;
         }
 
