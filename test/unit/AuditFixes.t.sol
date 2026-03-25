@@ -60,6 +60,18 @@ contract AuditFixesTest is Test {
 
     // ========== EVENTS (for expectEmit) ==========
     event MerkleRootUpdated(bytes32 indexed newRoot, uint64 atIdx);
+    event LogNewQuestion(
+        bytes32 indexed question_id,
+        address indexed user,
+        uint256 template_id,
+        string question,
+        bytes32 indexed content_hash,
+        address arbitrator,
+        uint32 timeout,
+        uint32 opening_ts,
+        uint256 nonce,
+        uint256 created
+    );
 
     // ========== SETUP ==========
 
@@ -171,6 +183,33 @@ contract AuditFixesTest is Test {
         (revokeQuestionId,) = registry.revokeQuestions(uid);
     }
 
+    function _latestRealityQuestion() internal returns (uint256 templateId, string memory questionText) {
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        bytes32 sig =
+            keccak256("LogNewQuestion(bytes32,address,uint256,string,bytes32,address,uint32,uint32,uint256,uint256)");
+
+        for (uint256 i = entries.length; i > 0; i--) {
+            Vm.Log memory entry = entries[i - 1];
+            if (entry.emitter != address(realityETH)) continue;
+            if (entry.topics.length == 0 || entry.topics[0] != sig) continue;
+
+            (uint256 emittedTemplateId, string memory question, address arbitrator, uint32 timeout, uint32 openingTs, uint256 nonce, uint256 created) =
+                abi.decode(entry.data, (uint256, string, address, uint32, uint32, uint256, uint256));
+
+            // Touch remaining decoded fields so the compiler does not warn about partial decode intent.
+            arbitrator;
+            timeout;
+            openingTs;
+            nonce;
+            created;
+
+            return (emittedTemplateId, question);
+        }
+
+        fail("Reality LogNewQuestion event not found");
+        return (0, "");
+    }
+
     // ================================================================
     //  RH-1: revokeAttempt counter for nonce uniqueness
     // ================================================================
@@ -203,6 +242,125 @@ contract AuditFixesTest is Test {
         _proposeRevokeWithAnswer(revoker, uid);
         att = registry.getAttestation(uid);
         assertEq(att.revokeAttempt, 2, "revokeAttempt should be 2 after second proposal");
+    }
+
+    function test_SubmissionQuestionPayload_UsesBlobHashAsField1() public {
+        bytes32 blobHash = keccak256("blob-submission-payload");
+        bytes32 metadataHash = keccak256("meta-submission-payload");
+        bytes32 extcodehash = keccak256("code-submission-payload");
+        uint256 chainId = 1;
+        uint256 nonce = 555;
+        bytes32 commitment = keccak256(abi.encode(blobHash, nonce));
+
+        vm.recordLogs();
+        vm.startPrank(attester1);
+        token.approve(address(registry), MIN_BOND);
+        bytes32 commitmentId = registry.commitSpec(commitment, chainId, extcodehash);
+        vm.warp(block.timestamp + 2);
+        registry.revealSpec(commitmentId, blobHash, nonce, metadataHash, MIN_BOND);
+        vm.stopPrank();
+
+        (uint256 actualTemplateId, string memory actual) = _latestRealityQuestion();
+        string memory delim = unicode"␟";
+        string memory expected = string.concat(
+            vm.toString(blobHash),
+            delim,
+            vm.toString(extcodehash),
+            delim,
+            vm.toString(chainId)
+        );
+
+        assertEq(actualTemplateId, registry.templateId(), "submission should use submission template");
+        assertEq(actual, expected, "submission payload should be blobHash<delim>extcodehash<delim>chainId");
+    }
+
+    function test_RevokeQuestionPayload_UsesUidAsField1() public {
+        bytes32 extcodehash = keccak256("code-revoke-payload");
+        bytes32 uid = _fullApproveAttestation(
+            attester1,
+            keccak256("blob-revoke-payload"),
+            keccak256("meta-revoke-payload"),
+            extcodehash,
+            1,
+            777
+        );
+
+        vm.recordLogs();
+        vm.startPrank(revoker);
+        token.approve(address(registry), MIN_BOND);
+        registry.proposeRevoke(uid, MIN_BOND);
+        vm.stopPrank();
+
+        (uint256 actualTemplateId, string memory actual) = _latestRealityQuestion();
+        string memory delim = unicode"␟";
+        string memory expected = string.concat(
+            vm.toString(uid),
+            delim,
+            vm.toString(extcodehash),
+            delim,
+            vm.toString(uint256(1))
+        );
+
+        assertEq(actualTemplateId, registry.revokeTemplateId(), "revoke should use revoke template");
+        assertEq(actual, expected, "raw revoke question payload should match builder output");
+    }
+
+    function test_SubmissionAndRevokePayloads_UseSameDelimitedShapeButDifferentTemplates() public {
+        bytes32 blobHash = keccak256("blob-shape-compare");
+        bytes32 metadataHash = keccak256("meta-shape-compare");
+        bytes32 extcodehash = keccak256("code-shape-compare");
+        uint256 chainId = 1;
+        uint256 nonce = 888;
+        bytes32 commitment = keccak256(abi.encode(blobHash, nonce));
+
+        vm.recordLogs();
+        vm.startPrank(attester1);
+        token.approve(address(registry), MIN_BOND);
+        bytes32 commitmentId = registry.commitSpec(commitment, chainId, extcodehash);
+        vm.warp(block.timestamp + 2);
+        bytes32 uid = registry.revealSpec(commitmentId, blobHash, nonce, metadataHash, MIN_BOND);
+        vm.stopPrank();
+
+        (uint256 submissionTemplateId, string memory submissionPayload) = _latestRealityQuestion();
+
+        bytes32 questionId;
+        (questionId,) = registry.questions(uid);
+        _answerAndFinalize(questionId, bytes32(uint256(1)), attester1);
+        registry.finalize(uid);
+
+        vm.recordLogs();
+        vm.startPrank(revoker);
+        token.approve(address(registry), MIN_BOND);
+        registry.proposeRevoke(uid, MIN_BOND);
+        vm.stopPrank();
+
+        (uint256 revokeTemplateId, string memory revokePayload) = _latestRealityQuestion();
+        string memory delim = unicode"␟";
+        string memory expectedSubmission = string.concat(
+            vm.toString(blobHash),
+            delim,
+            vm.toString(extcodehash),
+            delim,
+            vm.toString(chainId)
+        );
+        string memory expectedRevoke = string.concat(
+            vm.toString(uid),
+            delim,
+            vm.toString(extcodehash),
+            delim,
+            vm.toString(chainId)
+        );
+
+        assertEq(submissionTemplateId, registry.templateId(), "submission should use submission template");
+        assertEq(revokeTemplateId, registry.revokeTemplateId(), "revoke should use revoke template");
+        assertEq(submissionPayload, expectedSubmission, "submission payload should match expected 3-field format");
+        assertEq(revokePayload, expectedRevoke, "revoke payload should match expected 3-field format");
+        assertTrue(bytes(submissionPayload).length > 0, "submission payload should not be empty");
+        assertTrue(bytes(revokePayload).length > 0, "revoke payload should not be empty");
+        assertTrue(
+            keccak256(bytes(submissionPayload)) != keccak256(bytes(revokePayload)),
+            "submission and revoke payloads should differ"
+        );
     }
 
     // ================================================================

@@ -72,6 +72,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     address public immutable arbitrator;
     IRealityETH public realityETH;
     uint256 public templateId;
+    uint256 public revokeTemplateId;
     uint256 public minBond;
     IERC20 public bondToken;
     uint32 public configNonce;
@@ -425,7 +426,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         string memory questionParams = _buildRevokeQuestionParams(uid);
 
         bytes32 revokeQuestionId = realityETH.askQuestionWithMinBondERC20(
-            templateId,
+            revokeTemplateId,
             questionParams,
             arbitrator,
             DEFAULT_TIMEOUT,
@@ -463,7 +464,6 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         Attestation storage att = _attestations[uid];
         string memory delim = unicode"␟";
         return string(abi.encodePacked(
-            "REVOKE:",
             _bytes32ToString(uid),
             delim,
             _bytes32ToString(att.extcodehash),
@@ -663,6 +663,9 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         // Create template on Reality.eth
         templateId = realityETH.createTemplate(
             '{"title": "Is the ERC7730 specification %s for contract %s on chain %s correct?", "type": "bool", "category": "misc"}'
+        );
+        revokeTemplateId = realityETH.createTemplate(
+            '{"title": "Should attestation %s for contract %s on chain %s be revoked?", "type": "bool", "category": "misc"}'
         );
 
         emit BondTokenSet(_bondToken, _realityETH);

@@ -98,6 +98,7 @@ contract KaiSignRegistryTest is Test {
         assertEq(registry.owner(), owner);
         assertEq(registry.minBond(), MIN_BOND);
         assertTrue(registry.templateId() > 0);
+        assertTrue(registry.revokeTemplateId() > 0);
         assertEq(address(registry.bondToken()), address(token));
     }
 
@@ -163,6 +164,7 @@ contract KaiSignRegistryTest is Test {
         assertEq(address(newRegistry.bondToken()), address(token));
         assertEq(address(newRegistry.realityETH()), REALITY_ETH_SEPOLIA);
         assertTrue(newRegistry.templateId() > 0);
+        assertTrue(newRegistry.revokeTemplateId() > 0);
     }
 
     function test_SetBondToken_InvalidToken() public {
