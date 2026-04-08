@@ -480,6 +480,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         Attestation storage att = _attestations[uid];
 
         if (att.revokeProposedAt == 0) revert NoRevokeProposal();
+        if (att.revoked) revert AlreadyRevoked();
 
         QuestionData memory rq = revokeQuestions[uid];
         if (address(rq.realityInstance) == address(0)) revert AttestationNotFound();
@@ -489,9 +490,15 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         }
 
         bytes32 result = rq.realityInstance.resultFor(rq.questionId);
-        
-        if (uint256(result) == type(uint256).max) revert InvalidQuestionResult();
-        if (uint256(result) == type(uint256).max - 1) revert UnresolvedQuestionResult();
+
+        // Treat INVALID/UNRESOLVED same as rejection — reset state so a new revoke can be proposed
+        if (uint256(result) == type(uint256).max || uint256(result) == type(uint256).max - 1) {
+            att.revokeProposedAt = 0;
+            att.revokeProposer = address(0);
+            delete revokeQuestions[uid];
+            emit RevokeFinalized(uid, false);
+            return;
+        }
         bool revokeApproved = (uint256(result) == 1);
 
         if (revokeApproved) {
@@ -511,7 +518,11 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
 
             merkleRoot = _insertLeaf(leaf, revokeIdx - 1);
             merkleRootIdx = revokeIdx;
-            emit MerkleRootUpdated(merkleRoot, merkleRootIdx);  
+            emit MerkleRootUpdated(merkleRoot, merkleRootIdx);
+
+            att.revokeProposedAt = 0;
+            att.revokeProposer = address(0);
+            delete revokeQuestions[uid];
 
             emit RevokeFinalized(uid, true);
         } else {

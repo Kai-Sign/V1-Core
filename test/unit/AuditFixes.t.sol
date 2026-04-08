@@ -681,7 +681,7 @@ contract AuditFixesTest is Test {
         registry.finalize(uid);
     }
 
-    function test_RL1_FinalizeRevokeRevertsOnInvalid() public {
+    function test_RL1_FinalizeRevokeResetsOnInvalid() public {
         bytes32 uid = _fullApproveAttestation(
             attester1, keccak256("blob-rl1c"), keccak256("meta-rl1c"),
             keccak256("code-rl1c"), 1, 303
@@ -690,11 +690,15 @@ contract AuditFixesTest is Test {
         bytes32 rqId = _proposeRevokeWithAnswer(revoker, uid);
         _answerAndFinalize(rqId, bytes32(type(uint256).max), revoker);
 
-        vm.expectRevert(abi.encodeWithSignature("InvalidQuestionResult()"));
         registry.finalizeRevoke(uid);
+
+        IKaiSignRegistry.Attestation memory att = registry.getAttestation(uid);
+        assertEq(att.revokeProposedAt, 0, "revokeProposedAt should be reset");
+        assertEq(att.revokeProposer, address(0), "revokeProposer should be reset");
+        assertFalse(att.revoked, "Should not be revoked");
     }
 
-    function test_RL1_FinalizeRevokeRevertsOnUnresolved() public {
+    function test_RL1_FinalizeRevokeResetsOnUnresolved() public {
         bytes32 uid = _fullApproveAttestation(
             attester1, keccak256("blob-rl1d"), keccak256("meta-rl1d"),
             keccak256("code-rl1d"), 1, 304
@@ -703,8 +707,12 @@ contract AuditFixesTest is Test {
         bytes32 rqId = _proposeRevokeWithAnswer(revoker, uid);
         _answerAndFinalize(rqId, bytes32(type(uint256).max - 1), revoker);
 
-        vm.expectRevert(abi.encodeWithSignature("UnresolvedQuestionResult()"));
         registry.finalizeRevoke(uid);
+
+        IKaiSignRegistry.Attestation memory att = registry.getAttestation(uid);
+        assertEq(att.revokeProposedAt, 0, "revokeProposedAt should be reset");
+        assertEq(att.revokeProposer, address(0), "revokeProposer should be reset");
+        assertFalse(att.revoked, "Should not be revoked");
     }
 
     function test_RL1_FinalizeApprovalWorks() public {
