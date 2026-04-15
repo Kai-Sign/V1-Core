@@ -644,10 +644,10 @@ contract AuditFixesTest is Test {
     }
 
     // ================================================================
-    //  RL-1: finalize/finalizeRevoke revert on invalid & unresolved results
+    //  RL-1: finalize/finalizeRevoke should treat invalid & unresolved as terminal rejection
     // ================================================================
 
-    function test_RL1_FinalizeRevertsOnInvalid() public {
+    function test_RL1_FinalizeRejectsOnInvalid() public {
         (bytes32 uid, bytes32 questionId) = _commitAndReveal(
             attester1, keccak256("blob-rl1a"), keccak256("meta-rl1a"),
             keccak256("code-rl1a"), 1, 301
@@ -656,11 +656,17 @@ contract AuditFixesTest is Test {
         // Answer with INVALID (0xFF...FF)
         _answerAndFinalize(questionId, bytes32(type(uint256).max), attester1);
 
-        vm.expectRevert(abi.encodeWithSignature("InvalidQuestionResult()"));
+        registry.finalize(uid);
+
+        IKaiSignRegistry.Attestation memory att = registry.getAttestation(uid);
+        assertTrue(att.finalizedAt != 0, "invalid submission should be terminal");
+        assertTrue(att.revoked, "invalid submission should be rejected");
+
+        vm.expectRevert(abi.encodeWithSignature("AlreadyFinalized()"));
         registry.finalize(uid);
     }
 
-    function test_RL1_FinalizeRevertsOnUnresolved() public {
+    function test_RL1_FinalizeRejectsOnUnresolved() public {
         (bytes32 uid, bytes32 questionId) = _commitAndReveal(
             attester1, keccak256("blob-rl1b"), keccak256("meta-rl1b"),
             keccak256("code-rl1b"), 1, 302
@@ -669,7 +675,13 @@ contract AuditFixesTest is Test {
         // Answer with UNRESOLVED (0xFF...FE)
         _answerAndFinalize(questionId, bytes32(type(uint256).max - 1), attester1);
 
-        vm.expectRevert(abi.encodeWithSignature("UnresolvedQuestionResult()"));
+        registry.finalize(uid);
+
+        IKaiSignRegistry.Attestation memory att = registry.getAttestation(uid);
+        assertTrue(att.finalizedAt != 0, "unresolved submission should be terminal");
+        assertTrue(att.revoked, "unresolved submission should be rejected");
+
+        vm.expectRevert(abi.encodeWithSignature("AlreadyFinalized()"));
         registry.finalize(uid);
     }
 

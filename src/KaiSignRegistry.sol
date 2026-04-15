@@ -360,8 +360,13 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
 
         bytes32 result = q.realityInstance.resultFor(q.questionId);
         
-        if (uint256(result) == type(uint256).max) revert InvalidQuestionResult();
-        if (uint256(result) == type(uint256).max - 1) revert UnresolvedQuestionResult();
+        // Treat INVALID/UNRESOLVED same as rejection so the submission reaches terminal state.
+        if (uint256(result) == type(uint256).max || uint256(result) == type(uint256).max - 1) {
+            att.finalizedAt = uint64(block.timestamp);
+            att.revoked = true;
+            emit AttestationFinalized(uid, false);
+            return;
+        }
         bool approved = (uint256(result) == 1);
 
         att.finalizedAt = uint64(block.timestamp);
