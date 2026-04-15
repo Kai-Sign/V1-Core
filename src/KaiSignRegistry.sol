@@ -88,6 +88,8 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
 
     // ========== ATTESTATION STORAGE ==========
     mapping(bytes32 => Attestation) private _attestations;
+    mapping(bytes32 => MetadataStatus) private _metadataStatusByKey;
+    mapping(bytes32 => bytes32) private _latestUidByMetadataKey;
 
     // ========== CHAIN + EXTCODEHASH INDEXING ==========
     mapping(uint256 => mapping(bytes32 => bytes32[])) private _specsByChainAndBytecode;
@@ -131,6 +133,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         uint256 chainId,
         bytes32 extcodehash
     );
+    event MetadataStatusUpdated(bytes32 indexed metadataKey, bytes32 indexed uid, MetadataStatus status);
 
     // ========== CONSTRUCTOR ==========
     constructor(
@@ -353,6 +356,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
      */
     function finalize(bytes32 uid) external nonReentrant {  
         Attestation storage att = _attestations[uid];
+        bytes32 metadataKey = _computeMetadataKey(att.chainId, att.extcodehash, att.metadataHash);
 
         if (att.timestamp == 0) revert AttestationNotFound();
         if (att.finalizedAt != 0) revert AlreadyFinalized();
@@ -395,6 +399,10 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
             merkleRoot = _insertLeaf(leaf, idx - 1);
             merkleRootIdx = att.idx;
             emit MerkleRootUpdated(merkleRoot, merkleRootIdx);  
+
+            _metadataStatusByKey[metadataKey] = MetadataStatus.Approved;
+            _latestUidByMetadataKey[metadataKey] = uid;
+            emit MetadataStatusUpdated(metadataKey, uid, MetadataStatus.Approved);
 
             emit SpecIndexed(uid, att.chainId, att.extcodehash, att.blobHash, att.attester, idx);
         } else {
@@ -478,6 +486,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
      */
     function finalizeRevoke(bytes32 uid) external nonReentrant {  
         Attestation storage att = _attestations[uid];
+        bytes32 metadataKey = _computeMetadataKey(att.chainId, att.extcodehash, att.metadataHash);
 
         if (att.revokeProposedAt == 0) revert NoRevokeProposal();
         if (att.revoked) revert AlreadyRevoked();
@@ -520,6 +529,10 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
             merkleRootIdx = revokeIdx;
             emit MerkleRootUpdated(merkleRoot, merkleRootIdx);
 
+            _metadataStatusByKey[metadataKey] = MetadataStatus.Revoked;
+            _latestUidByMetadataKey[metadataKey] = uid;
+            emit MetadataStatusUpdated(metadataKey, uid, MetadataStatus.Revoked);
+
             att.revokeProposedAt = 0;
             att.revokeProposer = address(0);
             delete revokeQuestions[uid];
@@ -553,6 +566,24 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
             leafIdx,
             revoked
         ));
+    }
+
+    function computeMetadataKey(uint256 chainId, bytes32 extcodehash, bytes32 metadataHash)
+        public
+        pure
+        returns (bytes32 key)
+    {
+        return _computeMetadataKey(chainId, extcodehash, metadataHash);
+    }
+
+    function getMetadataStatus(uint256 chainId, bytes32 extcodehash, bytes32 metadataHash)
+        external
+        view
+        returns (MetadataStatus status, bytes32 uid)
+    {
+        bytes32 metadataKey = _computeMetadataKey(chainId, extcodehash, metadataHash);
+        status = _metadataStatusByKey[metadataKey];
+        uid = _latestUidByMetadataKey[metadataKey];
     }
 
     function verifyMerkleProof(
@@ -599,6 +630,14 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         }
 
         return currentHash;
+    }
+
+    function _computeMetadataKey(uint256 chainId, bytes32 extcodehash, bytes32 metadataHash)
+        internal
+        pure
+        returns (bytes32)
+    {
+        return keccak256(abi.encode(chainId, extcodehash, metadataHash));
     }
 
     /**

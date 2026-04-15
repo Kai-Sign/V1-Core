@@ -339,6 +339,23 @@ contract KaiSignRegistryTest is Test {
         assertFalse(valid);
     }
 
+    function test_GetMetadataStatus_Empty() public view {
+        (IKaiSignRegistry.MetadataStatus status, bytes32 uid) =
+            registry.getMetadataStatus(1, keccak256("nonexistent"), keccak256("metadata"));
+        assertEq(uint8(status), uint8(IKaiSignRegistry.MetadataStatus.Unknown));
+        assertEq(uid, bytes32(0));
+    }
+
+    function test_ComputeMetadataKey_IsDeterministic() public view {
+        bytes32 extcodehash = keccak256("bytecode");
+        bytes32 metadataHash = keccak256("metadata");
+        bytes32 key1 = registry.computeMetadataKey(1, extcodehash, metadataHash);
+        bytes32 key2 = registry.computeMetadataKey(1, extcodehash, metadataHash);
+
+        assertEq(key1, key2);
+        assertTrue(key1 != bytes32(0));
+    }
+
     // ========== MERKLE HELPERS TESTS ==========
 
     function test_VerifyMerkleProof_RejectsWrongLength() public {

@@ -244,6 +244,34 @@ contract AuditFixesTest is Test {
         assertEq(att.revokeAttempt, 2, "revokeAttempt should be 2 after second proposal");
     }
 
+    function test_MetadataStatusTracksApprovedThenRevoked() public {
+        bytes32 blobHash = keccak256("blob-status");
+        bytes32 metadataHash = keccak256("meta-status");
+        bytes32 extcodehash = keccak256("code-status");
+        uint256 chainId = 1;
+
+        (IKaiSignRegistry.MetadataStatus initialStatus, bytes32 initialUid) =
+            registry.getMetadataStatus(chainId, extcodehash, metadataHash);
+        assertEq(uint8(initialStatus), uint8(IKaiSignRegistry.MetadataStatus.Unknown));
+        assertEq(initialUid, bytes32(0));
+
+        bytes32 uid = _fullApproveAttestation(attester1, blobHash, metadataHash, extcodehash, chainId, 123);
+
+        (IKaiSignRegistry.MetadataStatus approvedStatus, bytes32 approvedUid) =
+            registry.getMetadataStatus(chainId, extcodehash, metadataHash);
+        assertEq(uint8(approvedStatus), uint8(IKaiSignRegistry.MetadataStatus.Approved));
+        assertEq(approvedUid, uid);
+
+        bytes32 revokeQuestionId = _proposeRevokeWithAnswer(revoker, uid);
+        _answerAndFinalize(revokeQuestionId, bytes32(uint256(1)), revoker);
+        registry.finalizeRevoke(uid);
+
+        (IKaiSignRegistry.MetadataStatus revokedStatus, bytes32 revokedUid) =
+            registry.getMetadataStatus(chainId, extcodehash, metadataHash);
+        assertEq(uint8(revokedStatus), uint8(IKaiSignRegistry.MetadataStatus.Revoked));
+        assertEq(revokedUid, uid);
+    }
+
     function test_SubmissionQuestionPayload_UsesBlobHashAsField1() public {
         bytes32 blobHash = keccak256("blob-submission-payload");
         bytes32 metadataHash = keccak256("meta-submission-payload");

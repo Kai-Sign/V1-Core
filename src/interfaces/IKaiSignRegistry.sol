@@ -7,6 +7,12 @@ pragma solidity ^0.8.20;
  * @dev Single registry on L1 for all chains with bond escalation and fork support
  */
 interface IKaiSignRegistry {
+    enum MetadataStatus {
+        Unknown,
+        Approved,
+        Revoked
+    }
+
     // ========== STRUCTS ==========
     struct Attestation {
         bytes32 uid;                // Unique identifier
@@ -109,6 +115,14 @@ interface IKaiSignRegistry {
     function getAttestation(bytes32 uid) external view returns (Attestation memory);
     function getSpecsForBytecode(uint256 chainId, bytes32 extcodehash) external view returns (bytes32[] memory);
     function getLatestSpecForBytecode(uint256 chainId, bytes32 extcodehash) external view returns (bytes32 uid, bool valid);
+    function computeMetadataKey(uint256 chainId, bytes32 extcodehash, bytes32 metadataHash)
+        external
+        pure
+        returns (bytes32 key);
+    function getMetadataStatus(uint256 chainId, bytes32 extcodehash, bytes32 metadataHash)
+        external
+        view
+        returns (MetadataStatus status, bytes32 uid);
 
     // ========== STATE ==========
     function currentIdx() external view returns (uint64);

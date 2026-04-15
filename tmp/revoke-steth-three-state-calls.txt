@@ -1,0 +1,153 @@
+# stETH revoke three-state check
+# contract: 0xae7ab96520de3a18e5e111b5eaab095312d7fe84
+# uid: 0x0ea5970340f8b61d1fec24adafaaca78fe127021b7d6f7451cb70fc635b65c09
+# revoke question id: 0xfbf87be7820eadaa831fd5b1354acb55dfe7250d26e46fa3163cefe5a804e078
+# registry: 0xb910E44893713b072ABC6949fB4441ad09999bC6
+# realityETH: 0x613559f3Cfc9Bba044ca6b62f432556423e6c413
+
+# ========================================
+# STATE 1: live Sepolia RPC
+# ========================================
+
+cast call 0xb910E44893713b072ABC6949fB4441ad09999bC6 \
+  "getAttestation(bytes32)((bytes32,uint256,bytes32,bytes32,bytes32,address,uint64,uint64,bool,uint64,uint64,address,uint64,uint32))" \
+  0x0ea5970340f8b61d1fec24adafaaca78fe127021b7d6f7451cb70fc635b65c09 \
+  --rpc-url $SEPOLIA_RPC_URL
+
+cast call 0xb910E44893713b072ABC6949fB4441ad09999bC6 \
+  "revokeQuestions(bytes32)((bytes32,address))" \
+  0x0ea5970340f8b61d1fec24adafaaca78fe127021b7d6f7451cb70fc635b65c09 \
+  --rpc-url $SEPOLIA_RPC_URL
+
+cast call 0xb910E44893713b072ABC6949fB4441ad09999bC6 \
+  "currentIdx()(uint64)" \
+  --rpc-url $SEPOLIA_RPC_URL
+
+cast call 0xb910E44893713b072ABC6949fB4441ad09999bC6 \
+  "merkleRoot()(bytes32)" \
+  --rpc-url $SEPOLIA_RPC_URL
+
+cast call 0x613559f3Cfc9Bba044ca6b62f432556423e6c413 \
+  "isFinalized(bytes32)(bool)" \
+  0xfbf87be7820eadaa831fd5b1354acb55dfe7250d26e46fa3163cefe5a804e078 \
+  --rpc-url $SEPOLIA_RPC_URL
+
+cast call 0x613559f3Cfc9Bba044ca6b62f432556423e6c413 \
+  "getFinalizeTS(bytes32)(uint32)" \
+  0xfbf87be7820eadaa831fd5b1354acb55dfe7250d26e46fa3163cefe5a804e078 \
+  --rpc-url $SEPOLIA_RPC_URL
+
+cast call 0x613559f3Cfc9Bba044ca6b62f432556423e6c413 \
+  "getBestAnswer(bytes32)(bytes32)" \
+  0xfbf87be7820eadaa831fd5b1354acb55dfe7250d26e46fa3163cefe5a804e078 \
+  --rpc-url $SEPOLIA_RPC_URL
+
+
+# ========================================
+# STATE 2: local fork before finalizeRevoke
+# ========================================
+
+anvil --fork-url "$SEPOLIA_RPC_URL" --chain-id 11155111 --port 8545
+
+cast call 0xb910E44893713b072ABC6949fB4441ad09999bC6 \
+  "getAttestation(bytes32)((bytes32,uint256,bytes32,bytes32,bytes32,address,uint64,uint64,bool,uint64,uint64,address,uint64,uint32))" \
+  0x0ea5970340f8b61d1fec24adafaaca78fe127021b7d6f7451cb70fc635b65c09 \
+  --rpc-url http://127.0.0.1:8545
+
+cast call 0xb910E44893713b072ABC6949fB4441ad09999bC6 \
+  "revokeQuestions(bytes32)((bytes32,address))" \
+  0x0ea5970340f8b61d1fec24adafaaca78fe127021b7d6f7451cb70fc635b65c09 \
+  --rpc-url http://127.0.0.1:8545
+
+cast call 0xb910E44893713b072ABC6949fB4441ad09999bC6 \
+  "currentIdx()(uint64)" \
+  --rpc-url http://127.0.0.1:8545
+
+cast call 0xb910E44893713b072ABC6949fB4441ad09999bC6 \
+  "merkleRoot()(bytes32)" \
+  --rpc-url http://127.0.0.1:8545
+
+cast call 0x613559f3Cfc9Bba044ca6b62f432556423e6c413 \
+  "isFinalized(bytes32)(bool)" \
+  0xfbf87be7820eadaa831fd5b1354acb55dfe7250d26e46fa3163cefe5a804e078 \
+  --rpc-url http://127.0.0.1:8545
+
+cast call 0x613559f3Cfc9Bba044ca6b62f432556423e6c413 \
+  "getFinalizeTS(bytes32)(uint32)" \
+  0xfbf87be7820eadaa831fd5b1354acb55dfe7250d26e46fa3163cefe5a804e078 \
+  --rpc-url http://127.0.0.1:8545
+
+cast call 0x613559f3Cfc9Bba044ca6b62f432556423e6c413 \
+  "getBestAnswer(bytes32)(bytes32)" \
+  0xfbf87be7820eadaa831fd5b1354acb55dfe7250d26e46fa3163cefe5a804e078 \
+  --rpc-url http://127.0.0.1:8545
+
+
+# ========================================
+# MOVE FORK TO STATE 3
+# answer YES locally, warp past finalizeTS, then finalizeRevoke
+# ========================================
+
+cast rpc anvil_impersonateAccount \
+  0xA295020e648d87468aA6BC32c9E13E2497c0244f \
+  --rpc-url http://127.0.0.1:8545
+
+cast send 0xD05c15Fc4Df4B53c4efE2141CCAFfB0ED32AC82c \
+  "approve(address,uint256)" \
+  0x613559f3Cfc9Bba044ca6b62f432556423e6c413 \
+  100000000000000000 \
+  --from 0xA295020e648d87468aA6BC32c9E13E2497c0244f \
+  --unlocked \
+  --rpc-url http://127.0.0.1:8545
+
+cast send 0x613559f3Cfc9Bba044ca6b62f432556423e6c413 \
+  "submitAnswerERC20(bytes32,bytes32,uint256,uint256)" \
+  0xfbf87be7820eadaa831fd5b1354acb55dfe7250d26e46fa3163cefe5a804e078 \
+  0x0000000000000000000000000000000000000000000000000000000000000001 \
+  0 \
+  100000000000000000 \
+  --from 0xA295020e648d87468aA6BC32c9E13E2497c0244f \
+  --unlocked \
+  --rpc-url http://127.0.0.1:8545
+
+cast call 0x613559f3Cfc9Bba044ca6b62f432556423e6c413 \
+  "getFinalizeTS(bytes32)(uint32)" \
+  0xfbf87be7820eadaa831fd5b1354acb55dfe7250d26e46fa3163cefe5a804e078 \
+  --rpc-url http://127.0.0.1:8545
+
+# copy the finalizeTS returned above, add 1, then:
+cast rpc anvil_setNextBlockTimestamp FINALIZE_TS_PLUS_1 \
+  --rpc-url http://127.0.0.1:8545
+
+cast rpc anvil_mine 1 \
+  --rpc-url http://127.0.0.1:8545
+
+cast send 0xb910E44893713b072ABC6949fB4441ad09999bC6 \
+  "finalizeRevoke(bytes32)" \
+  0x0ea5970340f8b61d1fec24adafaaca78fe127021b7d6f7451cb70fc635b65c09 \
+  --from 0xA295020e648d87468aA6BC32c9E13E2497c0244f \
+  --unlocked \
+  --rpc-url http://127.0.0.1:8545
+
+
+# ========================================
+# STATE 3: local fork after finalizeRevoke
+# ========================================
+
+cast call 0xb910E44893713b072ABC6949fB4441ad09999bC6 \
+  "getAttestation(bytes32)((bytes32,uint256,bytes32,bytes32,bytes32,address,uint64,uint64,bool,uint64,uint64,address,uint64,uint32))" \
+  0x0ea5970340f8b61d1fec24adafaaca78fe127021b7d6f7451cb70fc635b65c09 \
+  --rpc-url http://127.0.0.1:8545
+
+cast call 0xb910E44893713b072ABC6949fB4441ad09999bC6 \
+  "revokeQuestions(bytes32)((bytes32,address))" \
+  0x0ea5970340f8b61d1fec24adafaaca78fe127021b7d6f7451cb70fc635b65c09 \
+  --rpc-url http://127.0.0.1:8545
+
+cast call 0xb910E44893713b072ABC6949fB4441ad09999bC6 \
+  "currentIdx()(uint64)" \
+  --rpc-url http://127.0.0.1:8545
+
+cast call 0xb910E44893713b072ABC6949fB4441ad09999bC6 \
+  "merkleRoot()(bytes32)" \
+  --rpc-url http://127.0.0.1:8545

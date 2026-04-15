@@ -1,0 +1,262 @@
+{
+  "registry": "0xb910E44893713b072ABC6949fB4441ad09999bC6",
+  "realityETH": "0x613559f3Cfc9Bba044ca6b62f432556423e6c413",
+  "btoken": "0xD05c15Fc4Df4B53c4efE2141CCAFfB0ED32AC82c",
+  "startIdx": 281,
+  "endIdx": 310,
+  "count": 28,
+  "entries": [
+    {
+      "path": "lending/spark-sdai-ethereum.json",
+      "idx": 281,
+      "chainId": 1,
+      "extcodehash": "0x6135b62a3a5f6ed21408c83b3ce280b35144264cd680d6e78bb48fa8ed4db076",
+      "metadataHash": "0xd0daa5a8e93ad84dd859e794524f4013f8d3af3b8cf59bddda8255cfd2fd9951",
+      "uid": "0x7436ad42687f6b3becc0e8c438f8596c18dec32f09af9ca4839cd871b0dbd41a",
+      "questionId": "0x3bab15a447ed31d348f0d497b050595844fc1c33a08a4281fec8ae4f73511635"
+    },
+    {
+      "path": "lending/venus-vusdc-bsc.json",
+      "idx": 282,
+      "chainId": 56,
+      "extcodehash": "0xd6e00b8c8f24fb40df4eaeb95fcce7f605177339f239d1b04b2c21664c1b3ab2",
+      "metadataHash": "0x7cdcab9a2f63aad5f9a0f244dfd2797541331ed9bd846ce0fe4152941dc1562e",
+      "uid": "0x95d790e6719004370f7d76a514eab687d38fa36a05c977f9a77f8f912cbc9e42",
+      "questionId": "0x8b61b9b8f7f148fbbd6adf2c852b768a711d492bcf0624f35800d385f553c72d"
+    },
+    {
+      "path": "staking/ankr-eth-staking.json",
+      "idx": 283,
+      "chainId": 1,
+      "extcodehash": "0xed4d618ece3653c6f00953de5c0fe07633e551b524057adfcdc3237ff6ed77e1",
+      "metadataHash": "0xc4f9bd18764fad59e4245946636441abc9113b3b0062edfdfd519975d1ce00b4",
+      "uid": "0x586dd1781b5037af9b154a8de86c71385587b2c6b764a165ff4dbeb8ee00a645",
+      "questionId": "0x427abae18e2782bdc34c882fce03a46174e4adf505a23f23c5c092cbf996d4b9"
+    },
+    {
+      "path": "staking/aura-booster.json",
+      "idx": 284,
+      "chainId": 1,
+      "extcodehash": "0x4ed227ac46d18eef1e5840a4de16242745cf88076a5211f7eeb6d92f607c112d",
+      "metadataHash": "0x712e4622a23a21f1eaad46a5b384f15c5536d6c7a02a21e3f49cdd2d95c56803",
+      "uid": "0xa25093acde40801c9b828e86129880d9826cb369493f9356a46c2d6e6a6056c8",
+      "questionId": "0x114d7e1df35c726594424f009ea1a7b78fd7ec2823aab9e0a1ca2b34667d16a8"
+    },
+    {
+      "path": "staking/convex-booster.json",
+      "idx": 285,
+      "chainId": 1,
+      "extcodehash": "0x85c9b47873bc151451e5ea7aaf007d9a90cb676aa37aa7f26e85acf63749f291",
+      "metadataHash": "0x37f7f5e19fa375db9ad5a670d136e8921009c4f760c473aa9c4a20bbdcc6fae8",
+      "uid": "0xa9ac165cbac11654482e92c41b2820fb7fad447c5a8264b54106d3d01dd31037",
+      "questionId": "0x0d5510d4c7e6e1fa25611c320dcd31fed78d30c6599216dcaaa1783d2b3f7837"
+    },
+    {
+      "path": "staking/convex-cvxcrv-staking.json",
+      "idx": 286,
+      "chainId": 1,
+      "extcodehash": "0x62a15060f28c539d4e4e1147fc1348e449a2bb811b4267e0f9c38e229c06a672",
+      "metadataHash": "0xb89e032d8553ab0755c9b4eff7583c386ac4d7b24c4e0c26248cb022772d4c6f",
+      "uid": "0x3bdd49445e8b2b78c9f15d48446f50ce92ad42c4ae0e366b4217d1e9220c224b",
+      "questionId": "0xa37877837c0a8f349d18fdecf29d990e247f2b5faf2c7399c9572b7b2fbe8348"
+    },
+    {
+      "path": "staking/convex-frax-staking.json",
+      "idx": 287,
+      "chainId": 1,
+      "extcodehash": "0xa75384ac8ca5dab2ed6686990c433b283eab7c86cf4d92477f47ee9631d63ce7",
+      "metadataHash": "0x63ae012308866c5d13aceed1f1105e4f4abac0a8c1d9e829f4bb6c1f3333c5a0",
+      "uid": "0x7c4a398a9ca5558d5efa615ce3d03f3a8e66f54497e58fe24f522226146a9346",
+      "questionId": "0x11c63c8084459d77bf3783fc2d98aaf2e3e48c66763a172c60a5260f9f04365b"
+    },
+    {
+      "path": "staking/curve-gauge-controller.json",
+      "idx": 288,
+      "chainId": 1,
+      "extcodehash": "0x655bec9519bc4e87c56bb2c54767c5ae6407f8be1b29140f5110c29d9607d42d",
+      "metadataHash": "0x3450040b230a60c75cb9e8539f6a5ec8482981c1f39e09e9a8bc709b26f5afc3",
+      "uid": "0xb731302132155cc6e24d4cb84e60ede136fe1b17e45defea9faf46ef453f88a4",
+      "questionId": "0x73aeb234962700e24a5b7afe2d8bfc0575926f312fe61e84d1404f4d4a7fb96a"
+    },
+    {
+      "path": "staking/eigenlayer-delegation-manager.json",
+      "idx": 289,
+      "chainId": 1,
+      "extcodehash": "0x073c6ec3b11b1c79a5e70af69992743e1f9857ca449d45cf954c164b0e464a9a",
+      "metadataHash": "0x8d6e49c7e51ba8fc248057b48173a1171dedf89c39b00c43271ffc8509aec925",
+      "uid": "0x166ee9be240ea941c1ebeaa7780066c8dd92ebf2937cbe13fdf71842b0292dd6",
+      "questionId": "0x46e0532c311324ddbb77cdff4d4c6df06bb5ddd20dfd90551537fbc51710edd0"
+    },
+    {
+      "path": "staking/ethena-susde.json",
+      "idx": 291,
+      "chainId": 1,
+      "extcodehash": "0xadc4989c92fab525a1a22b3f60f5b61b77f9eb11b693e8afeba5736ea4b502e3",
+      "metadataHash": "0x033aea217ad2d5b6904e1751d9bbb860b2519683b24ae0af66791d5b5824cf32",
+      "uid": "0x8374849143fc0fe54f54c0ffaea3f1bd3f1fe8d58dcef810e6fa1144e9fefd51",
+      "questionId": "0xadfdb2f25db56bbde9175bd851da585c436d4b0fa0a9f6fa6a7ceb621911c131"
+    },
+    {
+      "path": "staking/etherfi-liquidity-pool.json",
+      "idx": 292,
+      "chainId": 1,
+      "extcodehash": "0x0b58ec11caee361ca0c1e484c12f6e7177634222186f7639bd9183dfee9d2278",
+      "metadataHash": "0xfc2c0c253b85d259bd7906e4574fb16b047f636398f27dd167b21173bbb4a9f1",
+      "uid": "0xb4a543b3f4b06a570678ffb3ca1e81867f6c1ec0e60291d2ddfe2799bd46c763",
+      "questionId": "0xdc96916b97c993e08ac5e7f1dcb396b6388352a0b83f4855c2ee59be864b8cbb"
+    },
+    {
+      "path": "staking/etherfi-withdraw-request.json",
+      "idx": 293,
+      "chainId": 1,
+      "extcodehash": "0x98c1780cbd326ecebbc50ba9912644e63606ba035d646f7a60d4dbec7f3870c6",
+      "metadataHash": "0x0ae3fd4c6f65f9bf25af00036a4d32d2bb045d456354d0a2e64d7976d9eede4a",
+      "uid": "0x71b7013a4b5fd92a3fd3e246670f41d63400ef8756d6fa6191c3bf9bdf3219aa",
+      "questionId": "0xce75a4eb410028d3c9f6364a6bc6daddf8aa77b8f8613366791d921078610324"
+    },
+    {
+      "path": "staking/frax-frxeth-minter.json",
+      "idx": 294,
+      "chainId": 1,
+      "extcodehash": "0xd5517d3be0b131ef314cd993db76434f602e97c316599bdfbc224d1f9683d24c",
+      "metadataHash": "0xe6ad0dd4d936eba5f0095854dfdfc3f707297df3604394b632c62637b297b188",
+      "uid": "0xe181abcb73c460dfe8f5d5c36e177b74c1dc2ef8b44a31de161fe54bfb148f8c",
+      "questionId": "0xcddc9b6171e938fee43aa1053e3f870cb6a133733452ca0435d610fc1b5a0edb"
+    },
+    {
+      "path": "staking/frax-sfrxeth.json",
+      "idx": 295,
+      "chainId": 1,
+      "extcodehash": "0x251c9c1fcabf4dd36157cc995ab6beec40439d7f781bfae4ae8247a96558ea2b",
+      "metadataHash": "0xb4d39b5f6e31264beaa09d9048ceecb8a25ad77aaa738781ccaffdb52f28a3a8",
+      "uid": "0x94ea7a0b2d45fa5a8de4624353b498eb660a9950f1d4043ab58cbb6f558e83b7",
+      "questionId": "0x6015cb220abaa3bacd755decc6026e9c88ae050c6f20409e6b6c3265659dd392"
+    },
+    {
+      "path": "staking/karak-vault-supervisor.json",
+      "idx": 296,
+      "chainId": 1,
+      "extcodehash": "0xde741c264ec7f60e744da6731a699d17530b431a41d2e2ebe7476abc11261e92",
+      "metadataHash": "0x3d72174cddc3933d580a9e718ee8b048c9632e45c7be20d5c49ce6225277774f",
+      "uid": "0xc1ba6f5acc82aeec6d1d66daa73b8a0dee61629a75e3fdc0272902d9e589279a",
+      "questionId": "0xbf7248beaa76881fe032328df85c302e362a86eb0ea5d545359ab32d5030337c"
+    },
+    {
+      "path": "staking/kelp-rseth-deposit-pool.json",
+      "idx": 298,
+      "chainId": 1,
+      "extcodehash": "0xdf933b8ebe298b318bc9de3d68a1775d2d498e44a8c99f6e2dad04fa1ba747b8",
+      "metadataHash": "0xdb418ce93ffc50f74687d5d81648bd16139ae4438b47f83e3211e80f68071067",
+      "uid": "0x47b87e92325f4f918109388fb68b45058969f63987c24f4eb8ea2e4fcb1e904d",
+      "questionId": "0xc616492e4ea9342e934d2de952cf435cfe38e9a4d7daf2edd56532436f768b4e"
+    },
+    {
+      "path": "staking/lido-steth.json",
+      "idx": 299,
+      "chainId": 1,
+      "extcodehash": "0xb9c1c929064cd21734c102a698e68bf617feefcfa5a9f62407c45401546736bf",
+      "metadataHash": "0xd55ace9e54f93fd9761bceef787a1e4571a3c7a01d0228133f12371df937ba04",
+      "uid": "0x0ea5970340f8b61d1fec24adafaaca78fe127021b7d6f7451cb70fc635b65c09",
+      "questionId": "0x6ec57a7e18624edf50585b4d5aa219c1c0d9aa2aedae8119dd0022166a0d96c3"
+    },
+    {
+      "path": "staking/lido-withdrawal-queue.json",
+      "idx": 300,
+      "chainId": 1,
+      "extcodehash": "0x9bc25fa4b2f98d56db4aa4156a6dc98360ccd4ef9c7bc7f891797b0024272100",
+      "metadataHash": "0x250cfe9c3abc15f479e2501a413e30ecb472d8c76b0383b4840f66ba388f08c5",
+      "uid": "0x799148131a81d98e5d75aaa1c353bc5817bfcc770affa8cf8d77b08a20726b44",
+      "questionId": "0xf43cdf444bcc341b8d8199e1dcf464b13d1f0a43c188783088c7947f9df9746d"
+    },
+    {
+      "path": "staking/lido-wsteth.json",
+      "idx": 301,
+      "chainId": 1,
+      "extcodehash": "0x630181884786c962140041cffa3acffbf39d8c93bde1a62b7b55046e57400557",
+      "metadataHash": "0x0adec56ab9261b1487b3cf7cf41665bc98c1754fc77bfe42beb4e3e3facde133",
+      "uid": "0x77dcf93da7369f4edccb2c0ba48a5a0a888b5747b12009409a75ab990df83028",
+      "questionId": "0xc4fb615dec81d7a61af363463a8c00ddffb39b3b975051c3fa64068bc8300ab0"
+    },
+    {
+      "path": "staking/neutrl-snusd.json",
+      "idx": 302,
+      "chainId": 1,
+      "extcodehash": "0xe1f60572b4648251c29de6d29dcd8a72626b7dbb9f5cff7b69c9072651349ee2",
+      "metadataHash": "0x320d5912e0cba9130a1cc105e968ba7a956b199edf3e7097f2a536f180af6568",
+      "uid": "0x54656a0f0cce0da7ee388d0dae56ac3d4c86b996a43e677d0412c73d9e50b7d9",
+      "questionId": "0x8ea0e6fbf2cd543cad208356af1625d1a24250441c3161bd8e6eb777b4046128"
+    },
+    {
+      "path": "staking/pendle-router-v4.json",
+      "idx": 303,
+      "chainId": 1,
+      "extcodehash": "0x6e7e96418259651300fbc9b9035c0613bfefc601ddbd840ab39a068ab3ee4293",
+      "metadataHash": "0x114d3ae12aa30695b9df63dbec1a3df21b145c231a9fd00a7e288c8fa8b30875",
+      "uid": "0xa53045f550b1fb9d50803d45d3892febb6ed21d0f9ae380afca869d40adb93d5",
+      "questionId": "0xcc90c25c664e1feb91c13429acd37ee89fa4ba80d9bf2705b5a26aa893eaab66"
+    },
+    {
+      "path": "staking/puffer-vault.json",
+      "idx": 304,
+      "chainId": 1,
+      "extcodehash": "0x4fa1494dbad31bb89ca5231b5a00971549aa3a4149a217cabb1c66f127da3cc5",
+      "metadataHash": "0xcec98beb521e3b472f3c9550d193c937288d3c94f46e39cbebe0054f770ccf23",
+      "uid": "0xdd793109e91d0072081b04ff2236cc203d1333887718bd7daad22cc1cfdd1b58",
+      "questionId": "0x90bb8e6368124f9acf66c006a341a474ab9e082ecb70389eed179444f0ac8c87"
+    },
+    {
+      "path": "staking/renzo-restake-manager.json",
+      "idx": 305,
+      "chainId": 1,
+      "extcodehash": "0xe5e3693157141608a301682c8c228c0277eac7efc0b98b57f874ca49752b5fd8",
+      "metadataHash": "0xdd54e09f1b36cc699b5c77b74f676c48aef72080a37124352bf4f193bcc8e47b",
+      "uid": "0xc0e1f63fccbbebc0e116a7a747df0caaf0e2ac0537c6a1ff06aac3f723b2df65",
+      "questionId": "0x4fc1027541824ee94f743fcd72b9e640909ed9047b8ddb92f7a8cb7a7d4a8438"
+    },
+    {
+      "path": "staking/rocketpool-deposit-pool.json",
+      "idx": 306,
+      "chainId": 1,
+      "extcodehash": "0xd818dd500cf2d736a24d61771ff4aea1ff41a07bb0c07cef52bbdeb118af5cc7",
+      "metadataHash": "0x3026d52aa90cd16fb5566cdd9e5e194d09ad1588b1dd7d47ad9415b5f9c7fef1",
+      "uid": "0x7a4b3e15251e5f8192e674ccc77bc5ca4b36ff2a60d04411554d75100ba84ed3",
+      "questionId": "0xffef29e571e7dcffebabe356c50692ab692132cf5b65149b73880219e49b30ed"
+    },
+    {
+      "path": "staking/sky-usds-farm.json",
+      "idx": 307,
+      "chainId": 1,
+      "extcodehash": "0xb42bce6288339f089f270fa011f700e16a077b8695aa609884027d1c068be8b7",
+      "metadataHash": "0xd9c64cdde5f0778530e102f595c4821392c5552bb3d23c09ea3ac79b9d979cf2",
+      "uid": "0x62eabe218fdbb1bbb27f09d54c9e9daebde01ee50d46610ced4d59966d9e76bf",
+      "questionId": "0x901c55dd5baf0a79c1a7ffdd70844c046f1afbc67868e20ef23580b25cfa3d40"
+    },
+    {
+      "path": "staking/stader-ethx-stake-pools.json",
+      "idx": 308,
+      "chainId": 1,
+      "extcodehash": "0x4d9be648c5bf39973670d9f8b481d5d0b971e6a2db2deccc6b98cde21c5dd83e",
+      "metadataHash": "0xb94b02f4f58775f63b692a38f9529dc4dbb3f013f900e18d50a533119e552205",
+      "uid": "0x64cae417b89a1e1a14007c97b4f1ea07be39e724c839182861bc81903d9a0097",
+      "questionId": "0xe344eaa699a4e20e0d2e759fc339f0a223af02047178e10a42f518f2b4e08306"
+    },
+    {
+      "path": "staking/swell-sweth.json",
+      "idx": 309,
+      "chainId": 1,
+      "extcodehash": "0x6bec2bf64f7e824109f6ed55f77dd7665801d6195e461666ad6a5342a9f6daf5",
+      "metadataHash": "0x13d2e6d878ae64aeb332bad9a360982a51c8ae0a6d2066eb9ae1c4c72298fe29",
+      "uid": "0xe0b731255200a78325718af70c5c6ff96e7b2f6b7e00701394fc94b3b0fe9f7e",
+      "questionId": "0x55158e2d61a879a663a8b83d6913e4876e51d7c02052ff6c0d04cc0966218355"
+    },
+    {
+      "path": "staking/yearn-v3-router-ethereum.json",
+      "idx": 310,
+      "chainId": 1,
+      "extcodehash": "0x2cafad2e7693cae549f7fcd85a99335a1eceab8da0e53508403b40f5db986f62",
+      "metadataHash": "0x5901485e1a8c5abe24f9a0b29c6249f53755522f84932560f74bd9ffdeb59980",
+      "uid": "0x92b92348151ea70e0f5f3c0ff69a92eb7798ba438accec595375f2956258c8ce",
+      "questionId": "0x1ac29728434a12d094741f318aca0a547e9e7fd18baacc6cd05a172c6e5b2bcf"
+    }
+  ]
+}
