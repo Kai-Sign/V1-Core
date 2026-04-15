@@ -18,7 +18,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
  * - Commit-reveal for spec submission (prevents front-running)
  * - Reality.eth for bond escalation (48h timeout, counter-bonds)
  * - chainId + extcodehash indexing (supports all chains from L1)
- * - Merkle root checkpoints with idx ordering
+ * - Incremental merkle tree for on-chain proof verification
  * - Universe ID for fork support (EIGEN-style intersubjective forking)
  * - Only APPROVED specs are indexed in merkle tree
  */
@@ -30,7 +30,6 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     error AlreadyRevoked();
     error InvalidExtcodehash();
     error InvalidChainId();
-    error InvalidMerkleRootIdx();
     error EmptyBlobHash();
     error CommitmentNotFound();
     error CommitmentAlreadyRevealed();
@@ -44,7 +43,6 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     error BelowMinBond();
     error EmptyMetadataHash();
     error BondTokenNotSet();
-    error IdxBeyondMigrated();
     error AlreadyImported();
     error TreeFull();
     error AlreadyMigrated();
@@ -62,7 +60,7 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     uint32 public constant DEFAULT_TIMEOUT = 48 hours;
     uint256 public constant MIN_REVEAL_DELAY = 1;
     bytes32 public constant LEAF_TYPEHASH =
-        keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,uint256 idx,bool revoked)");
+        keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,bool revoked)");
 
     // ========== FORK-READY: Universe tracking ==========
     uint256 public immutable override universeId;
@@ -83,8 +81,8 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     mapping(bytes32 => QuestionData) public questions;        // uid => submission question
     mapping(bytes32 => QuestionData) public revokeQuestions;   // uid => revoke question
 
-    // ========== INDEX FOR MERKLE ORDERING ==========
-    uint64 public override currentIdx;
+    // ========== INTERNAL MERKLE INSERTION CURSOR ==========
+    uint64 private currentIdx;
 
     // ========== ATTESTATION STORAGE ==========
     mapping(bytes32 => Attestation) private _attestations;
@@ -108,10 +106,8 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
     mapping(uint256 => bytes32) public filledSubtrees;
     mapping(uint256 => bytes32) public zeroHashes;
 
-    // ========== MERKLE ROOT CHECKPOINT ==========
+    // ========== MERKLE ROOT ==========
     bytes32 public override merkleRoot;
-    uint64 public override merkleRootIdx;
-    uint64 public migratedIdx;  
 
     // ========== EVENTS ==========
     event BondTokenSet(address indexed token, address indexed realityERC20);
@@ -307,12 +303,10 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
             metadataHash: metadataHash,
             attester: msg.sender,
             timestamp: uint64(block.timestamp),
-            idx: 0,  // Will be assigned on finalization if approved
             revoked: false,
             finalizedAt: 0,
             revokeProposedAt: 0,
             revokeProposer: address(0),
-            revokeIdx: 0,
             revokeAttempt: 0
         });
 
@@ -373,10 +367,9 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         att.finalizedAt = uint64(block.timestamp);
 
         if (approved) {
-            // APPROVED: Assign index and add to merkle tree
+            // APPROVED: Add to merkle tree
             if (currentIdx >= (1 << treeDepth)) revert TreeFull();
-            uint64 idx = ++currentIdx;
-            att.idx = idx;
+            ++currentIdx;
 
             // Index by chain and bytecode
             _specsByChainAndBytecode[att.chainId][att.extcodehash].push(uid);
@@ -387,23 +380,21 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
                 att.chainId,
                 att.extcodehash,
                 att.metadataHash,
-                att.idx,
                 false  // not revoked
             ));
 
             // Insert leaf into on-chain incremental tree
-            merkleRoot = _insertLeaf(leaf, idx - 1);
-            merkleRootIdx = att.idx;
-            emit MerkleRootUpdated(merkleRoot, merkleRootIdx);  
+            merkleRoot = _insertLeaf(leaf, currentIdx - 1);
+            emit MerkleRootUpdated(merkleRoot);
 
-            emit SpecIndexed(uid, att.chainId, att.extcodehash, att.blobHash, att.attester, idx);
+            emit SpecIndexed(uid, att.chainId, att.extcodehash, att.blobHash, att.attester);
         } else {
             // REJECTED: Mark as revoked, do NOT index
             att.revoked = true;
             // No merkle update, no incentives
         }
 
-        emit AttestationFinalized(uid, att.idx, approved);
+        emit AttestationFinalized(uid, approved);
     }
 
     // ========== REVOCATION ==========
@@ -504,21 +495,18 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
         if (revokeApproved) {
             att.revoked = true;
             if (currentIdx >= (1 << treeDepth)) revert TreeFull();
-            uint64 revokeIdx = ++currentIdx;
-            att.revokeIdx = revokeIdx;
+            ++currentIdx;
 
             bytes32 leaf = keccak256(abi.encode(
                 LEAF_TYPEHASH,
                 att.chainId,
                 att.extcodehash,
                 att.metadataHash,
-                revokeIdx,
                 true  // revoked
             ));
 
-            merkleRoot = _insertLeaf(leaf, revokeIdx - 1);
-            merkleRootIdx = revokeIdx;
-            emit MerkleRootUpdated(merkleRoot, merkleRootIdx);
+            merkleRoot = _insertLeaf(leaf, currentIdx - 1);
+            emit MerkleRootUpdated(merkleRoot);
 
             att.revokeProposedAt = 0;
             att.revokeProposer = address(0);
@@ -536,21 +524,16 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
 
     // ========== MERKLE HELPERS ==========
 
-    function computeAttestationLeaf(bytes32 uid) public view returns (bytes32 leaf) {
+    function computeAttestationLeaf(bytes32 uid, bool revoked) public view returns (bytes32 leaf) {
         Attestation memory att = _attestations[uid];
         if (att.timestamp == 0) revert AttestationNotFound();
         if (att.finalizedAt == 0) revert NotFinalized();
-        if (att.idx == 0) revert NotFinalized();
-
-        bool revoked = att.revoked;
-        uint64 leafIdx = revoked ? att.revokeIdx : att.idx;
 
         leaf = keccak256(abi.encode(
             LEAF_TYPEHASH,
             att.chainId,
             att.extcodehash,
             att.metadataHash,
-            leafIdx,
             revoked
         ));
     }
@@ -718,12 +701,10 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
 
         // Recompute root from frontier to ensure consistency
         merkleRoot = _computeRootFromFrontier(_currentIdx);
-        merkleRootIdx = _currentIdx;
         currentIdx = _currentIdx;
-        migratedIdx = _currentIdx;  
-        emit MerkleRootUpdated(merkleRoot, merkleRootIdx);  
+        emit MerkleRootUpdated(merkleRoot);
 
-        emit Migrated(merkleRoot, _currentIdx);
+        emit Migrated(merkleRoot);
     }
 
     /**
@@ -734,30 +715,27 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
      * @param chainId Target chain ID
      * @param extcodehash Target contract bytecode hash
      * @param metadataHash Hash of the metadata content
-     * @param idx Global index in merkle tree
      * @param revoked Whether attestation is revoked
+     * @param leafIndex 0-based position of the leaf in the merkle tree
      * @param merkleProof Proof of inclusion in the migrated merkle root
      */
     function verifyMigratedAttestation(
         uint256 chainId,
         bytes32 extcodehash,
         bytes32 metadataHash,
-        uint64 idx,
         bool revoked,
+        uint256 leafIndex,
         bytes32[] calldata merkleProof
     ) external view {
-        if (idx == 0) revert AttestationNotFound();
-
         bytes32 leaf = keccak256(abi.encode(
             LEAF_TYPEHASH,
             chainId,
             extcodehash,
             metadataHash,
-            idx,
             revoked
         ));
 
-        if (!verifyMerkleProof(leaf, merkleProof, idx - 1, merkleRoot)) {
+        if (!verifyMerkleProof(leaf, merkleProof, leafIndex, merkleRoot)) {
             revert InvalidMerkleProof();
         }
     }
@@ -770,23 +748,18 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
      * @param chainId Target chain ID
      * @param extcodehash Target contract bytecode hash
      * @param metadataHash Hash of metadata content
-     * @param idx Global index in merkle tree
+     * @param leafIndex 0-based position of the leaf in the merkle tree
      * @param merkleProof Proof of inclusion
      */
     function importMigratedAttestation(
         uint256 chainId,
         bytes32 extcodehash,
         bytes32 metadataHash,
-        uint64 idx,
+        uint256 leafIndex,
         bytes32[] calldata merkleProof
     ) external whenNotPaused {
-        // idx 0 is invalid (indices are 1-based)
-        if (idx == 0) revert AttestationNotFound();
-
-        if (idx > migratedIdx) revert IdxBeyondMigrated();
-
         // Derive UID deterministically from proof-verified fields
-        bytes32 uid = keccak256(abi.encode(chainId, extcodehash, metadataHash, idx));
+        bytes32 uid = keccak256(abi.encode(chainId, extcodehash, metadataHash));
 
         // Must not already exist
         if (_attestations[uid].timestamp != 0) revert AlreadyImported();
@@ -797,11 +770,10 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
             chainId,
             extcodehash,
             metadataHash,
-            idx,
             false  // not revoked
         ));
 
-        if (!verifyMerkleProof(leaf, merkleProof, idx - 1, merkleRoot)) {
+        if (!verifyMerkleProof(leaf, merkleProof, leafIndex, merkleRoot)) {
             revert InvalidMerkleProof();
         }
 
@@ -814,19 +786,17 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
             metadataHash: metadataHash,
             attester: address(0),
             timestamp: uint64(block.timestamp),
-            idx: idx,
             revoked: false,
             finalizedAt: uint64(block.timestamp),
             revokeProposedAt: 0,
             revokeProposer: address(0),
-            revokeIdx: 0,
             revokeAttempt: 0
         });
 
         // Index by chain and bytecode
         _specsByChainAndBytecode[chainId][extcodehash].push(uid);
 
-        emit SpecIndexed(uid, chainId, extcodehash, bytes32(0), address(0), idx);
+        emit SpecIndexed(uid, chainId, extcodehash, bytes32(0), address(0));
     }
 
     // ========== QUERY FUNCTIONS ==========
@@ -885,10 +855,6 @@ contract KaiSignRegistry is IKaiSignRegistry, Ownable2Step, ReentrancyGuard, Pau
 
     function getStateRoot() external view returns (bytes32) {
         return merkleRoot;
-    }
-
-    function getStateAtIdx() external view returns (uint64) {
-        return merkleRootIdx;
     }
 
     // ========== ADMIN FUNCTIONS ==========

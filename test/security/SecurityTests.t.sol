@@ -32,7 +32,7 @@ contract SecurityTests is Test {
     uint256 constant MIN_BOND = 100 ether; // Token amount
     uint32 constant DEFAULT_TIMEOUT = 48 hours;
     bytes32 constant LEAF_TYPEHASH =
-        keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,uint256 idx,bool revoked)");
+        keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,bool revoked)");
 
     // ========== STATE ==========
     KaiSignRegistry public registry;

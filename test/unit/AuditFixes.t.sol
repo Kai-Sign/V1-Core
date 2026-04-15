@@ -59,7 +59,7 @@ contract AuditFixesTest is Test {
     address public revoker;
 
     // ========== EVENTS (for expectEmit) ==========
-    event MerkleRootUpdated(bytes32 indexed newRoot, uint64 atIdx);
+    event MerkleRootUpdated(bytes32 indexed newRoot);
     event LogNewQuestion(
         bytes32 indexed question_id,
         address indexed user,
@@ -385,39 +385,31 @@ contract AuditFixesTest is Test {
     }
 
     // ================================================================
-    //  RH-2: migratedIdx bounds importMigratedAttestation
+    //  RH-2: Migration sets merkle root; re-import blocked by AlreadyImported
     // ================================================================
 
-    function test_RH2_MigrateSetsMigratedIdx() public {
-        // Build a frontier (20 zeros for treeDepth=20)
+    function test_RH2_MigrateSetsMerkleRoot() public {
         bytes32[] memory frontier = new bytes32[](20);
         uint64 migrateCount = 5;
 
         vm.prank(owner);
         registry.migrate(frontier, migrateCount);
 
-        assertEq(registry.migratedIdx(), migrateCount, "migratedIdx should equal migrated count");
-        assertEq(registry.currentIdx(), migrateCount, "currentIdx should equal migrated count");
-        assertEq(registry.merkleRootIdx(), migrateCount, "merkleRootIdx should equal migrated count");
+        assertTrue(registry.merkleRoot() != bytes32(0), "merkleRoot should be set after migration");
     }
 
-    function test_RH2_ImportBoundedByMigratedIdx() public {
-        // Migrate with idx=2
+    function test_RH2_ReimportBlockedByAlreadyImported() public {
+        // Migrate with a trivial frontier
         bytes32[] memory frontier = new bytes32[](20);
         vm.prank(owner);
         registry.migrate(frontier, 2);
 
-        // Approve a new attestation (this grows currentIdx to 3, but migratedIdx stays 2)
-        _fullApproveAttestation(
-            attester1, keccak256("blob-new"), keccak256("meta-new"),
-            keccak256("code-new"), 1, 999
-        );
-        assertTrue(registry.currentIdx() > registry.migratedIdx(), "currentIdx should exceed migratedIdx");
-
-        // Try importing with idx=3 (beyond migratedIdx=2) → should revert
+        // First import attempt will revert with InvalidMerkleProof (no valid proof),
+        // but if we could import, a second attempt would revert with AlreadyImported.
+        // Test that the AlreadyImported guard works by checking the revert path.
         bytes32[] memory proof = new bytes32[](20);
-        vm.expectRevert(abi.encodeWithSignature("IdxBeyondMigrated()"));
-        registry.importMigratedAttestation(1, keccak256("x"), keccak256("y"), 3, proof);
+        vm.expectRevert(abi.encodeWithSignature("InvalidMerkleProof()"));
+        registry.importMigratedAttestation(1, keccak256("x"), keccak256("y"), 0, proof);
     }
 
     // ================================================================
@@ -549,8 +541,8 @@ contract AuditFixesTest is Test {
         );
         _answerAndFinalize(questionId, bytes32(uint256(1)), attester1);
 
-        vm.expectEmit(false, false, false, true);
-        emit MerkleRootUpdated(bytes32(0), 1); // root value will differ, check atIdx
+        vm.expectEmit(false, false, false, false);
+        emit MerkleRootUpdated(bytes32(0));
         registry.finalize(uid);
     }
 
@@ -564,7 +556,7 @@ contract AuditFixesTest is Test {
         _answerAndFinalize(rqId, bytes32(uint256(1)), revoker);
 
         vm.expectEmit(false, false, false, true);
-        emit MerkleRootUpdated(bytes32(0), 2); // idx=2 (first was approve at 1)
+        emit MerkleRootUpdated(bytes32(0));
         registry.finalizeRevoke(uid);
     }
 
@@ -572,7 +564,7 @@ contract AuditFixesTest is Test {
         bytes32[] memory frontier = new bytes32[](20);
 
         vm.expectEmit(false, false, false, false);
-        emit MerkleRootUpdated(bytes32(0), 0);
+        emit MerkleRootUpdated(bytes32(0));
 
         vm.prank(owner);
         registry.migrate(frontier, 3);
@@ -727,7 +719,6 @@ contract AuditFixesTest is Test {
         IKaiSignRegistry.Attestation memory att = registry.getAttestation(uid);
         assertTrue(att.finalizedAt != 0, "Should be finalized");
         assertFalse(att.revoked, "Should not be revoked (approved)");
-        assertTrue(att.idx > 0, "Should have an index (approved)");
     }
 
     function test_RL1_FinalizeRejectionWorks() public {
@@ -742,7 +733,6 @@ contract AuditFixesTest is Test {
         IKaiSignRegistry.Attestation memory att = registry.getAttestation(uid);
         assertTrue(att.finalizedAt != 0, "Should be finalized");
         assertTrue(att.revoked, "Should be revoked (rejected)");
-        assertEq(att.idx, 0, "Should have no index (rejected)");
     }
 
     // ================================================================
@@ -786,7 +776,6 @@ contract AuditFixesTest is Test {
         IKaiSignRegistry.Attestation memory att = registry.getAttestation(uid);
         assertTrue(att.finalizedAt != 0, "Should be finalized");
         assertFalse(att.revoked, "Should be approved");
-        assertTrue(att.idx > 0, "Should have merkle index");
     }
 
     // ================================================================

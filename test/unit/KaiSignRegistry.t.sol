@@ -32,7 +32,7 @@ contract KaiSignRegistryTest is Test {
     uint256 constant MIN_BOND = 100 ether; // Token amount
     uint32 constant DEFAULT_TIMEOUT = 48 hours;
     bytes32 constant LEAF_TYPEHASH =
-        keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,uint256 idx,bool revoked)");
+        keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,bool revoked)");
 
     // ========== STATE ==========
     KaiSignRegistry public registry;
@@ -352,10 +352,6 @@ contract KaiSignRegistryTest is Test {
 
     // ========== STATE GETTERS TESTS ==========
 
-    function test_CurrentIdx() public view {
-        assertEq(registry.currentIdx(), 0);
-    }
-
     function test_MerkleRoot() public view {
         assertEq(registry.merkleRoot(), bytes32(0));
     }
@@ -363,27 +359,26 @@ contract KaiSignRegistryTest is Test {
     // ========== EIP-712 LEAF HASH TESTS ==========
 
     function test_LeafTypehashValue() public view {
-        bytes32 expected = keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,uint256 idx,bool revoked)");
+        bytes32 expected = keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,bool revoked)");
         assertEq(registry.LEAF_TYPEHASH(), expected, "LEAF_TYPEHASH should match EIP-712 schema string");
     }
 
     function test_LeafHashDeterministic() public view {
         // Verify that the same inputs always produce the same leaf hash
-        bytes32 typehash = keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,uint256 idx,bool revoked)");
+        bytes32 typehash = keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,bool revoked)");
 
         uint256 chainId = 42161; // Arbitrum
         bytes32 extcodehash = keccak256("some-contract");
         bytes32 metadataHash = keccak256("some-metadata");
-        uint64 idx = 5;
         bool revoked = false;
 
-        bytes32 hash1 = keccak256(abi.encode(typehash, chainId, extcodehash, metadataHash, idx, revoked));
-        bytes32 hash2 = keccak256(abi.encode(typehash, chainId, extcodehash, metadataHash, idx, revoked));
+        bytes32 hash1 = keccak256(abi.encode(typehash, chainId, extcodehash, metadataHash, revoked));
+        bytes32 hash2 = keccak256(abi.encode(typehash, chainId, extcodehash, metadataHash, revoked));
 
         assertEq(hash1, hash2, "Same inputs must produce same leaf hash");
 
         // Different inputs must produce different hash
-        bytes32 hash3 = keccak256(abi.encode(typehash, chainId, extcodehash, metadataHash, idx, true));
+        bytes32 hash3 = keccak256(abi.encode(typehash, chainId, extcodehash, metadataHash, true));
         assertTrue(hash1 != hash3, "Different revoked status must produce different hash");
     }
 }

@@ -16,12 +16,10 @@ interface IKaiSignRegistry {
         bytes32 metadataHash;       // keccak256(canonical(metadata)) - provable content hash
         address attester;           // Who created this attestation
         uint64 timestamp;           // When it was created
-        uint64 idx;                 // Global index for merkle ordering
         bool revoked;               // Whether this attestation is revoked
         uint64 finalizedAt;         // When finalized (0 = not finalized)
         uint64 revokeProposedAt;    // When revoke was proposed (0 = no proposal)
         address revokeProposer;     // Who proposed the revoke (for incentive claims)
-        uint64 revokeIdx;           // Tree index of revocation leaf (0 = not revoked on-tree)
         uint32 revokeAttempt;       // Fix RH-1: counter for revoke attempts (nonce uniqueness)
     }
 
@@ -31,13 +29,11 @@ interface IKaiSignRegistry {
         uint256 indexed chainId,
         bytes32 indexed extcodehash,
         bytes32 blobHash,
-        address attester,
-        uint64 idx
+        address attester
     );
 
     event AttestationFinalized(
         bytes32 indexed uid,
-        uint64 indexed idx,
         bool approved
     );
 
@@ -51,11 +47,11 @@ interface IKaiSignRegistry {
         bool revoked
     );
 
-    event MerkleRootUpdated(bytes32 indexed newRoot, uint64 atIdx);
+    event MerkleRootUpdated(bytes32 indexed newRoot);
 
     event MinBondUpdated(uint256 oldBond, uint256 newBond);
 
-    event Migrated(bytes32 indexed merkleRoot, uint64 currentIdx);
+    event Migrated(bytes32 indexed merkleRoot);
 
     // ========== COMMIT-REVEAL ==========
     function commitSpec(
@@ -80,7 +76,7 @@ interface IKaiSignRegistry {
     function finalizeRevoke(bytes32 uid) external;
 
     // ========== MERKLE HELPERS ==========
-    function computeAttestationLeaf(bytes32 uid) external view returns (bytes32 leaf);
+    function computeAttestationLeaf(bytes32 uid, bool revoked) external view returns (bytes32 leaf);
     function verifyMerkleProof(
         bytes32 leaf,
         bytes32[] calldata proof,
@@ -92,8 +88,8 @@ interface IKaiSignRegistry {
         uint256 chainId,
         bytes32 extcodehash,
         bytes32 metadataHash,
-        uint64 idx,
         bool revoked,
+        uint256 leafIndex,
         bytes32[] calldata merkleProof
     ) external view;
 
@@ -101,7 +97,7 @@ interface IKaiSignRegistry {
         uint256 chainId,
         bytes32 extcodehash,
         bytes32 metadataHash,
-        uint64 idx,
+        uint256 leafIndex,
         bytes32[] calldata merkleProof
     ) external;
 
@@ -111,9 +107,7 @@ interface IKaiSignRegistry {
     function getLatestSpecForBytecode(uint256 chainId, bytes32 extcodehash) external view returns (bytes32 uid, bool valid);
 
     // ========== STATE ==========
-    function currentIdx() external view returns (uint64);
     function merkleRoot() external view returns (bytes32);
-    function merkleRootIdx() external view returns (uint64);
     function treeDepth() external view returns (uint256);
     function universeId() external view returns (uint256);
     function parentRegistry() external view returns (address);

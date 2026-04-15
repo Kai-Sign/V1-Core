@@ -40,7 +40,7 @@ contract BTokenForkTest is Test {
     uint256 constant MIN_TOKEN_BOND = 100 ether; // 100 bTokens
     uint32 constant DEFAULT_TIMEOUT = 48 hours;
     bytes32 constant LEAF_TYPEHASH =
-        keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,uint256 idx,bool revoked)");
+        keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,bool revoked)");
 
     // ========== EVENTS ==========
 
