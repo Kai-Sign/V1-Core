@@ -78,7 +78,7 @@ contract WorkflowTests is Test {
 
         vm.startPrank(owner);
         registry = new KaiSignRegistry(
-            20, 1, address(0), owner,
+            1, address(0), owner,
             NO_ARBITRATOR, MIN_BOND
         );
 
@@ -204,7 +204,6 @@ contract WorkflowTests is Test {
         // Deploy child registry
         vm.startPrank(owner);
         KaiSignRegistry childRegistry = new KaiSignRegistry(
-            20,                         // treeDepth
             2,                          // universeId = 2
             address(registry),          // parentRegistry = first registry
             owner,

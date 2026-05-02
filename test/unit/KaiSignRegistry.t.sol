@@ -76,7 +76,6 @@ contract KaiSignRegistryTest is Test {
         // Deploy registry
         vm.startPrank(owner);
         registry = new KaiSignRegistry(
-            20,                   // treeDepth
             1,                    // universeId
             address(0),           // parentRegistry
             owner,                // initialOwner
@@ -92,7 +91,7 @@ contract KaiSignRegistryTest is Test {
     // ========== CONSTRUCTOR TESTS ==========
 
     function test_Constructor_SetsCorrectValues() public view {
-        assertEq(registry.treeDepth(), 20);
+        assertEq(registry.SMT_DEPTH(), 256);
         assertEq(registry.universeId(), 1);
         assertEq(registry.parentRegistry(), address(0));
         assertEq(registry.owner(), owner);
@@ -100,24 +99,6 @@ contract KaiSignRegistryTest is Test {
         assertTrue(registry.templateId() > 0);
         assertTrue(registry.revokeTemplateId() > 0);
         assertEq(address(registry.bondToken()), address(token));
-    }
-
-    function test_Constructor_InvalidTreeDepth_Zero() public {
-        vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSignature("InvalidTreeDepth()"));
-        new KaiSignRegistry(
-            0, 1, address(0), owner,
-            NO_ARBITRATOR, MIN_BOND
-        );
-    }
-
-    function test_Constructor_InvalidTreeDepth_TooLarge() public {
-        vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSignature("InvalidTreeDepth()"));
-        new KaiSignRegistry(
-            33, 1, address(0), owner,
-            NO_ARBITRATOR, MIN_BOND
-        );
     }
 
     // ========== SET MIN BOND TESTS ==========
@@ -150,7 +131,7 @@ contract KaiSignRegistryTest is Test {
         // Deploy new registry without setBondToken
         vm.prank(owner);
         KaiSignRegistry newRegistry = new KaiSignRegistry(
-            20, 2, address(0), owner,
+            2, address(0), owner,
             NO_ARBITRATOR, MIN_BOND
         );
 
@@ -170,7 +151,7 @@ contract KaiSignRegistryTest is Test {
     function test_SetBondToken_InvalidToken() public {
         vm.prank(owner);
         KaiSignRegistry newRegistry = new KaiSignRegistry(
-            20, 2, address(0), owner,
+            2, address(0), owner,
             NO_ARBITRATOR, MIN_BOND
         );
 
@@ -182,7 +163,7 @@ contract KaiSignRegistryTest is Test {
     function test_SetBondToken_InvalidRealityETH() public {
         vm.prank(owner);
         KaiSignRegistry newRegistry = new KaiSignRegistry(
-            20, 2, address(0), owner,
+            2, address(0), owner,
             NO_ARBITRATOR, MIN_BOND
         );
 
@@ -270,7 +251,7 @@ contract KaiSignRegistryTest is Test {
         // Deploy new registry without setBondToken
         vm.prank(owner);
         KaiSignRegistry newRegistry = new KaiSignRegistry(
-            20, 2, address(0), owner,
+            2, address(0), owner,
             NO_ARBITRATOR, MIN_BOND
         );
 
@@ -339,46 +320,38 @@ contract KaiSignRegistryTest is Test {
         assertFalse(valid);
     }
 
-    // ========== MERKLE HELPERS TESTS ==========
+    // ========== SMT VERIFIER TESTS ==========
 
-    function test_VerifyMerkleProof_RejectsWrongLength() public {
-        bytes32 leaf = keccak256("leaf");
+    function test_VerifySmtProof_RejectsWrongLength() public view {
+        bytes32 key = registry.smtKey(1, keccak256("c"));
         bytes32[] memory proof = new bytes32[](0);
-
-        // Empty proof should revert (must be treeDepth)
-        vm.expectRevert(abi.encodeWithSignature("InvalidMerkleProof()"));
-        registry.verifyMerkleProof(leaf, proof, 0, leaf);
+        // Wrong length must return false (not revert).
+        assertFalse(registry.verifySmtProof(key, bytes32(0), proof, bytes32(0)));
     }
 
     // ========== STATE GETTERS TESTS ==========
 
-    function test_MerkleRoot() public view {
-        assertEq(registry.merkleRoot(), bytes32(0));
+    function test_SmtRoot_StartsAtZero() public view {
+        assertEq(registry.smtRoot(), bytes32(0));
     }
 
-    // ========== EIP-712 LEAF HASH TESTS ==========
+    // ========== LEAF HASH TESTS ==========
 
     function test_LeafTypehashValue() public view {
-        bytes32 expected = keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,bool revoked)");
-        assertEq(registry.LEAF_TYPEHASH(), expected, "LEAF_TYPEHASH should match EIP-712 schema string");
+        bytes32 expected = keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash)");
+        assertEq(registry.LEAF_TYPEHASH(), expected, "LEAF_TYPEHASH should match SMT schema string");
     }
 
-    function test_LeafHashDeterministic() public view {
-        // Verify that the same inputs always produce the same leaf hash
-        bytes32 typehash = keccak256("RegistryLeaf(uint256 chainId,bytes32 extcodehash,bytes32 metadataHash,bool revoked)");
-
-        uint256 chainId = 42161; // Arbitrum
+    function test_ApprovedLeafDeterministic() public view {
+        uint256 chainId = 42161;
         bytes32 extcodehash = keccak256("some-contract");
         bytes32 metadataHash = keccak256("some-metadata");
-        bool revoked = false;
 
-        bytes32 hash1 = keccak256(abi.encode(typehash, chainId, extcodehash, metadataHash, revoked));
-        bytes32 hash2 = keccak256(abi.encode(typehash, chainId, extcodehash, metadataHash, revoked));
+        bytes32 a = registry.approvedLeaf(chainId, extcodehash, metadataHash);
+        bytes32 b = registry.approvedLeaf(chainId, extcodehash, metadataHash);
+        assertEq(a, b, "Same inputs must produce same leaf hash");
 
-        assertEq(hash1, hash2, "Same inputs must produce same leaf hash");
-
-        // Different inputs must produce different hash
-        bytes32 hash3 = keccak256(abi.encode(typehash, chainId, extcodehash, metadataHash, true));
-        assertTrue(hash1 != hash3, "Different revoked status must produce different hash");
+        bytes32 c = registry.approvedLeaf(chainId, extcodehash, keccak256("different-metadata"));
+        assertTrue(a != c, "Different metadataHash must produce different leaf hash");
     }
 }

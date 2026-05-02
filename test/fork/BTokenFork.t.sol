@@ -102,7 +102,6 @@ contract BTokenForkTest is Test {
         // Deploy KaiSignRegistry (ERC20 only mode)
         vm.startPrank(deployer);
         registry = new KaiSignRegistry(
-            20,                         // treeDepth
             1,                          // universeId
             address(0),                 // parentRegistry (none)
             deployer,                   // initialOwner
@@ -320,7 +319,6 @@ contract BTokenForkTest is Test {
         // Deploy child registry (universe 2) with parent
         vm.startPrank(deployer);
         KaiSignRegistry childRegistry = new KaiSignRegistry(
-            20,                         // treeDepth
             2,                          // universeId = 2
             address(registry),          // parentRegistry = first registry
             deployer,

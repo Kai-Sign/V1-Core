@@ -79,7 +79,7 @@ contract SecurityTests is Test {
 
         vm.startPrank(owner);
         registry = new KaiSignRegistry(
-            20, 1, address(0), owner,
+            1, address(0), owner,
             NO_ARBITRATOR, MIN_BOND
         );
 
@@ -165,7 +165,7 @@ contract SecurityTests is Test {
         // Deploy new registry without setBondToken
         vm.prank(owner);
         KaiSignRegistry newRegistry = new KaiSignRegistry(
-            20, 2, address(0), owner,
+            2, address(0), owner,
             NO_ARBITRATOR, MIN_BOND
         );
 
@@ -266,7 +266,7 @@ contract SecurityTests is Test {
         // Deploy new registry without setBondToken
         vm.prank(owner);
         KaiSignRegistry newRegistry = new KaiSignRegistry(
-            20, 2, address(0), owner,
+            2, address(0), owner,
             NO_ARBITRATOR, MIN_BOND
         );
 
