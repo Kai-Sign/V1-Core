@@ -32,7 +32,6 @@ contract DeployAll is Script {
 
         // 2. Deploy KaiSign (bondToken not set yet)
         KaiSignRegistry kaisign = new KaiSignRegistry(
-            20,          // treeDepth
             1,           // universeId
             address(0),  // parentRegistry
             deployer,    // initialOwner

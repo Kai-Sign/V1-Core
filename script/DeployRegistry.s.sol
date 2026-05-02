@@ -20,7 +20,6 @@ contract DeployRegistry is Script {
 
         // 2. Deploy KaiSign (ERC20 only mode)
         KaiSignRegistry kaisign = new KaiSignRegistry(
-            20,          // treeDepth
             1,           // universeId
             address(0),  // parentRegistry
             deployer,    // initialOwner
