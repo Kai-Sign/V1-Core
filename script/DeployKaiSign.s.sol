@@ -19,7 +19,7 @@ contract DeployKaiSign is Script {
         address[] memory initialAdmins = new address[](1);
         initialAdmins[0] = msg.sender;
         
-        bytes32 salt = 0x319d4829c8512c09bedf1688c873a330c0c0888875b02da9f06256b59c99ee36;
+        bytes32 salt = 0x519d4829c8512c09bedf1688c873a330c0c0888875b02da9f06256b59c99ee37;
         
         // Calculate deterministic address
         address predictedAddress = vm.computeCreate2Address(

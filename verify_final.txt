@@ -1,0 +1,32 @@
+KaiSign Contract Verification Summary
+=====================================
+
+Contract Address: 0x4dFEA0C2B472a14cD052a8f9DF9f19fa5CF03719
+Network: Sepolia (Chain ID: 11155111)
+Deployed Bytecode: Matches compiled bytecode prefix
+
+VERIFICATION ATTEMPTS:
+1. ✗ Using flattened contract - Import path issues
+2. ✗ Using original source with via-ir flag - Bytecode mismatch  
+3. ✗ Using original source without via-ir flag - Bytecode mismatch
+
+ISSUE ANALYSIS:
+- The deployed bytecode doesn't match the compiled bytecode
+- This suggests the contract was deployed with different compiler settings
+- Possible causes:
+  * Different solc version (tried v0.8.20+commit.a1b79de6)
+  * Different optimization settings (tried 200 runs)
+  * Different via-ir setting (tried both true/false)
+  * Different compiler metadata settings
+
+CONSTRUCTOR ARGUMENTS (decoded):
+- _realityETH: 0xaf33DcB6E8c5c4D9dDF579f53031b514d19449CA
+- _arbitrator: 0x05B942fAEcfB3924970E3A28e0F230910CEDFF45  
+- _treasury: 0x7D8730aD11f0D421bd41c6E5584F20c744CBAf29
+- _minBond: 10000000000000000 (1e16)
+- _initialAdmins: [0x1804c8AB1F12E6bbf3894d4083f33e07309d1f38]
+
+CONSTRUCTOR ARGS (hex):
+0x000000000000000000000000af33dcb6e8c5c4d9ddf579f53031b514d19449ca00000000000000000000000005b942faecfb3924970e3a28e0f230910cedff450000000000000000000000007d8730ad11f0d421bd41c6e5584f20c744cbaf29000000000000000000000000000000000000000000000000002386f26fc1000000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000010000000000000000000000001804c8ab1f12e6bbf3894d4083f33e07309d1f38
+
+STATUS: VERIFICATION FAILED - Bytecode mismatch indicates deployment used different compiler settings than current foundry.toml configuration.

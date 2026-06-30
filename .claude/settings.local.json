@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cast tx:*)",
+      "Bash(forge verify-contract:*)",
+      "Bash(jq:*)",
+      "Bash(cast abi-decode:*)",
+      "Bash(cast code:*)",
+      "Bash(src/KaiSign.sol:KaiSign)",
+      "Bash(forge verify-check:*)",
+      "Bash(forge clean:*)",
+      "Bash(forge build:*)",
+      "Bash(git checkout:*)",
+      "Bash(cast creation:*)",
+      "Bash(cast call:*)",
+      "Bash(cast logs:*)",
+      "Bash(forge script:*)",
+      "Bash(export SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com)",
+      "Bash(cast wallet address:*)",
+      "WebSearch"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
